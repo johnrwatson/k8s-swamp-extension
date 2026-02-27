@@ -1,0 +1,44 @@
+id: be9dd9b0-fc50-471e-abb5-2f02beea0c96
+name: pod-health-check
+description: Discover all pods via cluster-pods, then iterate over each to fetch detailed status and the last 50 lines of container logs
+version: 1
+jobs:
+  - name: discover
+    description: List all pods in the configured namespace to populate the pod data set
+    steps:
+      - name: list-all
+        description: Fetch all pods from the K8s API
+        task:
+          type: model_method
+          modelIdOrName: cluster-pods
+          methodName: list
+  - name: inspect
+    description: Iterate over each discovered pod to fetch its full status and recent logs
+    dependsOn:
+      - job: discover
+        condition:
+          type: succeeded
+    steps:
+      - name: get-status
+        description: Read detailed pod status including container states, conditions, and restart counts
+        forEach:
+          item: pod
+          in: ${{ data.findBySpec("cluster-pods", "pod") }}
+        task:
+          type: model_method
+          modelIdOrName: cluster-pods
+          methodName: get
+          inputs:
+            podName: ${{ self.pod.attributes.name }}
+      - name: get-logs
+        description: Fetch the last 50 lines of stdout/stderr logs from each pod's containers
+        forEach:
+          item: pod
+          in: ${{ data.findBySpec("cluster-pods", "pod") }}
+        task:
+          type: model_method
+          modelIdOrName: cluster-pods
+          methodName: getLogs
+          inputs:
+            podName: ${{ self.pod.attributes.name }}
+            tailLines: 50

@@ -1,0 +1,43 @@
+id: b1e038a4-04a9-4763-befa-02c8c5ffcd16
+name: storage-health
+description: Storage health check — PVC binding status, capacity usage, PersistentVolume inventory, and storage-related events
+version: 1
+inputs:
+  properties:
+    pvcModel:
+      type: string
+      description: Name of the @swamp_lord/pvc model instance targeting the namespace
+    eventModel:
+      type: string
+      description: Name of the @swamp_lord/event model instance targeting the namespace
+  required:
+    - pvcModel
+    - eventModel
+jobs:
+  - name: collect
+    description: Gather PVC status, PV inventory, and storage events
+    steps:
+      - name: list-pvcs
+        description: Fetch all PVCs to check binding status, storage classes, requested vs actual capacity, and access modes
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.pvcModel }}
+          methodName: list
+      - name: list-pvs
+        description: Fetch cluster-wide PersistentVolumes to check phases, reclaim policies, and volume sources
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.pvcModel }}
+          methodName: listVolumes
+      - name: list-events
+        description: Fetch namespace events to surface FailedMount, FailedAttachVolume, and ProvisioningFailed warnings
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.eventModel }}
+          methodName: list
+      - name: get-warnings
+        description: Fetch only warning events to highlight storage provisioning failures and mount errors
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.eventModel }}
+          methodName: getWarnings

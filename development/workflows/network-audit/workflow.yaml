@@ -1,0 +1,51 @@
+id: 153573f2-bce7-4657-879f-5d6317c9d7ca
+name: network-audit
+description: Network policy audit — NetworkPolicy inventory, pod selector coverage, service endpoints, and traffic rule analysis
+version: 1
+inputs:
+  properties:
+    netpolModel:
+      type: string
+      description: Name of the @swamp_lord/netpol model instance targeting the namespace
+    serviceModel:
+      type: string
+      description: Name of the @swamp_lord/service model instance targeting the namespace
+    podModel:
+      type: string
+      description: Name of the @swamp_lord/pod model instance targeting the namespace
+    eventModel:
+      type: string
+      description: Name of the @swamp_lord/event model instance targeting the namespace
+  required:
+    - netpolModel
+    - serviceModel
+    - podModel
+    - eventModel
+jobs:
+  - name: collect
+    description: Gather NetworkPolicies, services, pods, and events for network analysis
+    steps:
+      - name: list-netpols
+        description: Fetch all NetworkPolicies to audit pod selectors, ingress/egress rules, CIDR blocks, and policy types
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.netpolModel }}
+          methodName: list
+      - name: list-services
+        description: Fetch all services to cross-reference with NetworkPolicy selectors and check endpoint exposure
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.serviceModel }}
+          methodName: list
+      - name: list-pods
+        description: Fetch all pods to identify which pods are covered by NetworkPolicies and which are unprotected
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.podModel }}
+          methodName: list
+      - name: get-warnings
+        description: Fetch warning events to surface any network-related failures
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.eventModel }}
+          methodName: getWarnings

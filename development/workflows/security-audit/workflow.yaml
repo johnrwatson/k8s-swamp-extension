@@ -1,0 +1,83 @@
+id: 14f9de97-d94e-4e62-9a55-78edc575ae49
+name: security-audit
+description: Audit namespace security posture — deployment security contexts, volumes, secrets, configmaps, ingress TLS, NetworkPolicy coverage, RBAC roles/bindings, and ServiceAccount permissions
+version: 3
+inputs:
+  properties:
+    deploymentModel:
+      type: string
+      description: Name of the @swamp_lord/deployment model instance targeting the namespace
+    secretModel:
+      type: string
+      description: Name of the @swamp_lord/secret model instance targeting the namespace
+    configmapModel:
+      type: string
+      description: Name of the @swamp_lord/configmap model instance targeting the namespace
+    ingressModel:
+      type: string
+      description: Name of the @swamp_lord/ingress model instance targeting the namespace
+    netpolModel:
+      type: string
+      description: Name of the @swamp_lord/netpol model instance targeting the namespace
+    rbacModel:
+      type: string
+      description: Name of the @swamp_lord/rbac model instance targeting the namespace
+  required:
+    - deploymentModel
+    - secretModel
+    - configmapModel
+    - ingressModel
+    - netpolModel
+    - rbacModel
+jobs:
+  - name: collect
+    description: Gather all security-relevant resources from the namespace
+    steps:
+      - name: list-deployments
+        description: Fetch all deployments to inspect container security contexts, volume mounts, and image sources
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.deploymentModel }}
+          methodName: list
+      - name: list-secrets
+        description: Inventory all secrets by type and key names (no content pulled)
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.secretModel }}
+          methodName: list
+      - name: list-configmaps
+        description: Fetch all configmaps to check for accidentally embedded credentials or sensitive config
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.configmapModel }}
+          methodName: list
+      - name: list-ingresses
+        description: Fetch all ingresses to verify TLS termination and annotation-based security policies
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.ingressModel }}
+          methodName: list
+      - name: list-netpols
+        description: Fetch all NetworkPolicies to verify pod selector coverage, ingress/egress restrictions, and CIDR blocks
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.netpolModel }}
+          methodName: list
+      - name: list-roles
+        description: Fetch namespace Roles to audit permission rules
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.rbacModel }}
+          methodName: listRoles
+      - name: list-role-bindings
+        description: Fetch namespace RoleBindings to map subject-to-role assignments
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.rbacModel }}
+          methodName: listRoleBindings
+      - name: list-service-accounts
+        description: Fetch ServiceAccounts to check auto-mount token settings
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.rbacModel }}
+          methodName: listServiceAccounts

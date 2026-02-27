@@ -1,0 +1,18 @@
+# Swamp internal data
+.swamp/
+.swamp.yaml
+/models/
+
+# Binaries
+minikube-*
+
+# Debug artifacts
+debug-challenge.yaml
+
+# Workflow run history
+workflows/*/runs/
+workflows/*/latest
+
+# macOS
+.DS_Store
+._*

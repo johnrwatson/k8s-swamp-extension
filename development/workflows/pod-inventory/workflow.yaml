@@ -1,0 +1,20 @@
+id: 8dbc9cbf-6a48-4065-bfe2-2d0b3559f65b
+name: pod-inventory
+description: List all pods via the cluster-pods model and collect per-pod CPU/memory metrics from the metrics-server in a single job
+version: 1
+jobs:
+  - name: collect
+    description: List pods from the K8s API and query the metrics-server for resource usage
+    steps:
+      - name: list-pods
+        description: Fetch all pods in the configured namespace via the K8s API
+        task:
+          type: model_method
+          modelIdOrName: cluster-pods
+          methodName: list
+      - name: collect-metrics
+        description: Query the metrics-server for CPU and memory usage of all pods in the namespace
+        task:
+          type: model_method
+          modelIdOrName: cluster-pods
+          methodName: getMetrics

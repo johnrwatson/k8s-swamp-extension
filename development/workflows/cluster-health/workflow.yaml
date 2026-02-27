@@ -1,0 +1,59 @@
+id: 07dac9da-b595-43a8-b3a9-db6844b3b177
+name: cluster-health
+description: Cluster-wide health overview — node conditions, resource capacity, CPU/memory utilization, pod distribution, and storage status
+version: 2
+inputs:
+  properties:
+    nodeModel:
+      type: string
+      description: Name of the @swamp_lord/node model instance
+    podModel:
+      type: string
+      description: Name of the @swamp_lord/pod model instance targeting the namespace to check
+    pvcModel:
+      type: string
+      description: Name of the @swamp_lord/pvc model instance targeting the namespace to check
+  required:
+    - nodeModel
+    - podModel
+    - pvcModel
+jobs:
+  - name: assess
+    description: Collect node status, metrics, pod health, and storage data
+    steps:
+      - name: list-nodes
+        description: Fetch all nodes with conditions (Ready, MemoryPressure, DiskPressure), capacity, taints, and schedulability
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.nodeModel }}
+          methodName: list
+      - name: get-node-metrics
+        description: Fetch CPU and memory usage for all nodes from metrics-server
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.nodeModel }}
+          methodName: getMetrics
+      - name: list-pods
+        description: Fetch all pods to assess distribution, phases, and restart counts
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.podModel }}
+          methodName: list
+      - name: get-pod-metrics
+        description: Fetch per-pod CPU and memory usage from metrics-server
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.podModel }}
+          methodName: getMetrics
+      - name: list-pvcs
+        description: Fetch PVC binding status and capacity to check for unbound or full volumes
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.pvcModel }}
+          methodName: list
+      - name: list-pvs
+        description: Fetch cluster PersistentVolumes to check reclaim policies and available capacity
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.pvcModel }}
+          methodName: listVolumes

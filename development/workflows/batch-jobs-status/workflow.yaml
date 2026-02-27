@@ -1,0 +1,43 @@
+id: 85f5b09a-2aad-4682-8a11-2fc5e0bbfcc1
+name: batch-jobs-status
+description: Batch workload status — Job completion rates, CronJob schedules, failure counts, and batch-related warnings
+version: 1
+inputs:
+  properties:
+    jobModel:
+      type: string
+      description: Name of the @swamp_lord/job model instance targeting the namespace
+    eventModel:
+      type: string
+      description: Name of the @swamp_lord/event model instance targeting the namespace
+  required:
+    - jobModel
+    - eventModel
+jobs:
+  - name: collect
+    description: Gather Job/CronJob status and batch events
+    steps:
+      - name: list-jobs
+        description: Fetch all Jobs to check completion counts, failure rates, durations, and active/succeeded/failed status
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.jobModel }}
+          methodName: listJobs
+      - name: list-cronjobs
+        description: Fetch all CronJobs to check schedules, suspend status, concurrency policies, and last run times
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.jobModel }}
+          methodName: listCronJobs
+      - name: list-events
+        description: Fetch namespace events to surface job completion, failure, and scheduling events
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.eventModel }}
+          methodName: list
+      - name: get-warnings
+        description: Fetch only warning events to highlight BackoffLimitExceeded, DeadlineExceeded, and failed scheduling
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.eventModel }}
+          methodName: getWarnings

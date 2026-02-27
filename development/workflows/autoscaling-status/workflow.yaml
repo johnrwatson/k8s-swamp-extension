@@ -1,0 +1,47 @@
+id: 5935cf85-a935-4e1f-b65b-0c4eb62afa08
+name: autoscaling-status
+description: Autoscaling status report — HPA current vs target metrics, replica counts, scale conditions, and related deployment state
+version: 1
+inputs:
+  properties:
+    hpaModel:
+      type: string
+      description: Name of the @swamp_lord/hpa model instance targeting the namespace
+    deploymentModel:
+      type: string
+      description: Name of the @swamp_lord/deployment model instance targeting the namespace
+    eventModel:
+      type: string
+      description: Name of the @swamp_lord/event model instance targeting the namespace
+  required:
+    - hpaModel
+    - deploymentModel
+    - eventModel
+jobs:
+  - name: collect
+    description: Gather HPA metrics, deployment state, and scaling events
+    steps:
+      - name: list-hpas
+        description: Fetch all HPAs to compare current vs target metrics, replica ranges, scale conditions, and last scale times
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.hpaModel }}
+          methodName: list
+      - name: list-deployments
+        description: Fetch all deployments to cross-reference HPA targets with actual replica counts and rollout status
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.deploymentModel }}
+          methodName: list
+      - name: list-events
+        description: Fetch namespace events to surface ScalingReplicaSet, SuccessfulRescale, and FailedGetResourceMetric events
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.eventModel }}
+          methodName: list
+      - name: get-warnings
+        description: Fetch only warning events to highlight scaling failures and metric collection errors
+        task:
+          type: model_method
+          modelIdOrName: ${{ inputs.eventModel }}
+          methodName: getWarnings
