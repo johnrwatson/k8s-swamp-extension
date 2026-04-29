@@ -17,12 +17,13 @@ const SummarySchema = z.object({
 }).passthrough();
 
 export const model = {
-  type: "@swamp_lord/pod-summary",
+  type: "@john/pod-summary",
   version: "2026.02.26.1",
   globalArguments: GlobalArgsSchema,
   resources: {
     summary: {
-      description: "Aggregated pod counts by phase, node, restart totals, high-restart pods, and healthy/unhealthy breakdown",
+      description:
+        "Aggregated pod counts by phase, node, restart totals, high-restart pods, and healthy/unhealthy breakdown",
       schema: SummarySchema,
       lifetime: "infinite",
       garbageCollection: 5,
@@ -31,7 +32,7 @@ export const model = {
   methods: {
     summarize: {
       description:
-        "Read pod resources from a @swamp_lord/pod instance and compute counts by phase, node, restart totals, and healthy/unhealthy breakdown",
+        "Read pod resources from a @john/pod instance and compute counts by phase, node, restart totals, and healthy/unhealthy breakdown",
       arguments: z.object({}),
       execute: async (_args, context) => {
         const sourceName = context.globalArgs.sourceName;

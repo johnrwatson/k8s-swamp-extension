@@ -70,9 +70,7 @@ function normalizePod(raw) {
     name: cs.name || "",
     ready: cs.ready || false,
     restartCount: cs.restartCount || 0,
-    state: cs.state
-      ? Object.keys(cs.state)[0] || "unknown"
-      : "unknown",
+    state: cs.state ? Object.keys(cs.state)[0] || "unknown" : "unknown",
     image: cs.image || "",
   }));
 
@@ -92,9 +90,7 @@ function normalizePod(raw) {
     nodeName: spec.nodeName || "",
     podIP: status.podIP || "",
     hostIP: status.hostIP || "",
-    startTime: status.startTime
-      ? new Date(status.startTime).toISOString()
-      : "",
+    startTime: status.startTime ? new Date(status.startTime).toISOString() : "",
     restartCount: totalRestarts,
     containerStatuses,
     conditions,
@@ -104,24 +100,27 @@ function normalizePod(raw) {
 // --- Model ---
 
 export const model = {
-  type: "@swamp_lord/pod",
+  type: "@john/pod",
   version: "2026.02.26.1",
   globalArguments: K8sGlobalArgsSchema,
   resources: {
     pod: {
-      description: "Pod state including phase, container statuses, conditions, IPs, and restart counts",
+      description:
+        "Pod state including phase, container statuses, conditions, IPs, and restart counts",
       schema: PodSchema,
       lifetime: "infinite",
       garbageCollection: 10,
     },
     metrics: {
-      description: "Per-pod and per-container CPU/memory usage from the metrics-server",
+      description:
+        "Per-pod and per-container CPU/memory usage from the metrics-server",
       schema: MetricsSchema,
       lifetime: "1h",
       garbageCollection: 5,
     },
     execResult: {
-      description: "Stdout, exit code, and metadata from a non-interactive kubectl exec",
+      description:
+        "Stdout, exit code, and metadata from a non-interactive kubectl exec",
       schema: ExecResultSchema,
       lifetime: "1h",
       garbageCollection: 5,
@@ -166,14 +165,18 @@ export const model = {
     },
 
     list: {
-      description: "List all pods in the configured namespace, optionally filtered by label selector",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      description:
+        "List all pods in the configured namespace, optionally filtered by label selector",
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
         const labels = context.globalArgs.labels;
 
-        const resp = await coreApi.listNamespacedPod({ namespace: ns, labelSelector: labels });
+        const resp = await coreApi.listNamespacedPod({
+          namespace: ns,
+          labelSelector: labels,
+        });
         const pods = resp.items || [];
 
         context.logger.info("Found {count} pods in {ns}", {
@@ -196,15 +199,20 @@ export const model = {
     },
 
     get: {
-      description: "Get a single pod's full status including phase, container states, conditions, and IPs",
+      description:
+        "Get a single pod's full status including phase, container states, conditions, and IPs",
       arguments: z.object({
         podName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const pod = await coreApi.readNamespacedPod({ name: args.podName, namespace: ns });
+        const pod = await coreApi.readNamespacedPod({
+          name: args.podName,
+          namespace: ns,
+        });
         const normalized = normalizePod(pod);
 
         const handle = await context.writeResource(
@@ -219,15 +227,17 @@ export const model = {
     // --- Mutating methods ---
 
     create: {
-      description: "Create a pod from a container image name or a full pod spec object",
+      description:
+        "Create a pod from a container image name or a full pod spec object",
       arguments: z.object({
         podName: z.string(),
         image: z.string().optional(),
         spec: z.any().optional(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         let podSpec;
         if (args.spec) {
@@ -246,7 +256,10 @@ export const model = {
           throw new Error("Either 'image' or 'spec' must be provided");
         }
 
-        const created = await coreApi.createNamespacedPod({ namespace: ns, body: podSpec });
+        const created = await coreApi.createNamespacedPod({
+          namespace: ns,
+          body: podSpec,
+        });
         const normalized = normalizePod(created);
 
         const handle = await context.writeResource(
@@ -262,12 +275,16 @@ export const model = {
       description: "Delete a pod",
       arguments: z.object({
         podName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        await coreApi.deleteNamespacedPod({ name: args.podName, namespace: ns });
+        await coreApi.deleteNamespacedPod({
+          name: args.podName,
+          namespace: ns,
+        });
 
         context.logger.info("Deleted pod {name} in {ns}", {
           name: args.podName,
@@ -278,16 +295,21 @@ export const model = {
     },
 
     restart: {
-      description: "Delete a pod and wait up to waitSeconds for its controller to recreate it in Running state",
+      description:
+        "Delete a pod and wait up to waitSeconds for its controller to recreate it in Running state",
       arguments: z.object({
         podName: z.string(),
         waitSeconds: z.number().default(30),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        await coreApi.deleteNamespacedPod({ name: args.podName, namespace: ns });
+        await coreApi.deleteNamespacedPod({
+          name: args.podName,
+          namespace: ns,
+        });
 
         context.logger.info("Deleted pod {name}, waiting for recreation", {
           name: args.podName,
@@ -300,7 +322,10 @@ export const model = {
         while (Date.now() < deadline) {
           await new Promise((r) => setTimeout(r, 2000));
           try {
-            const pod = await coreApi.readNamespacedPod({ name: args.podName, namespace: ns });
+            const pod = await coreApi.readNamespacedPod({
+              name: args.podName,
+              namespace: ns,
+            });
             if (pod.status?.phase === "Running") {
               newPod = pod;
               break;
@@ -331,16 +356,18 @@ export const model = {
     // --- Operational methods ---
 
     getLogs: {
-      description: "Fetch the last N lines of container logs via the K8s API and store as a streaming file",
+      description:
+        "Fetch the last N lines of container logs via the K8s API and store as a streaming file",
       arguments: z.object({
         podName: z.string(),
         container: z.string().optional(),
         tailLines: z.number().default(100),
         previous: z.boolean().default(false),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         const resp = await coreApi.readNamespacedPodLog({
           name: args.podName,
@@ -362,11 +389,12 @@ export const model = {
     },
 
     getMetrics: {
-      description: "Query the metrics-server API for per-pod and per-container CPU/memory usage in the namespace",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      description:
+        "Query the metrics-server API for per-pod and per-container CPU/memory usage in the namespace",
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { metricsClient } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         let podMetrics;
         try {
@@ -420,7 +448,8 @@ export const model = {
     },
 
     exec: {
-      description: "Run a command in a pod container via kubectl exec and capture stdout/stderr and exit code",
+      description:
+        "Run a command in a pod container via kubectl exec and capture stdout/stderr and exit code",
       arguments: z.object({
         podName: z.string(),
         command: z.array(z.string()),
@@ -433,7 +462,8 @@ export const model = {
         const kubectlArgs = [
           "exec",
           args.podName,
-          "-n", ns,
+          "-n",
+          ns,
         ];
 
         if (args.container) {

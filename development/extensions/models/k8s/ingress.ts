@@ -1,5 +1,10 @@
 import { z } from "npm:zod@4";
-import { buildClient, K8sGlobalArgsSchema, normalizeMeta, sanitizeInstanceName } from "./_helpers.ts";
+import {
+  buildClient,
+  K8sGlobalArgsSchema,
+  normalizeMeta,
+  sanitizeInstanceName,
+} from "./_helpers.ts";
 
 // --- Schemas ---
 
@@ -61,7 +66,9 @@ function normalizeIngress(raw) {
   const defaultSvc = defaultBackend.service || {};
   const defaultPort = defaultSvc.port || {};
 
-  const loadBalancerIPs = (lb.ingress || []).map((i) => i.ip || i.hostname || "");
+  const loadBalancerIPs = (lb.ingress || []).map((i) =>
+    i.ip || i.hostname || ""
+  );
 
   return {
     ...meta,
@@ -77,12 +84,13 @@ function normalizeIngress(raw) {
 // --- Model ---
 
 export const model = {
-  type: "@swamp_lord/ingress",
+  type: "@john/ingress",
   version: "2026.02.27.1",
   globalArguments: K8sGlobalArgsSchema,
   resources: {
     ingress: {
-      description: "Ingress with rules, TLS config, default backend, and load balancer IPs",
+      description:
+        "Ingress with rules, TLS config, default backend, and load balancer IPs",
       schema: IngressSchema,
       lifetime: "infinite",
       garbageCollection: 10,
@@ -91,13 +99,16 @@ export const model = {
   methods: {
     list: {
       description: "List all ingresses in the configured namespace",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { networkingApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
         const labels = context.globalArgs.labels;
 
-        const resp = await networkingApi.listNamespacedIngress({ namespace: ns, labelSelector: labels });
+        const resp = await networkingApi.listNamespacedIngress({
+          namespace: ns,
+          labelSelector: labels,
+        });
         const ingresses = resp.items || [];
 
         context.logger.info("Found {count} ingresses in {ns}", {
@@ -120,15 +131,20 @@ export const model = {
     },
 
     get: {
-      description: "Get an ingress's spec with rules, TLS config, and load balancer status",
+      description:
+        "Get an ingress's spec with rules, TLS config, and load balancer status",
       arguments: z.object({
         ingressName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { networkingApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const ing = await networkingApi.readNamespacedIngress({ name: args.ingressName, namespace: ns });
+        const ing = await networkingApi.readNamespacedIngress({
+          name: args.ingressName,
+          namespace: ns,
+        });
         const normalized = normalizeIngress(ing);
 
         const handle = await context.writeResource(
@@ -141,7 +157,8 @@ export const model = {
     },
 
     create: {
-      description: "Create an ingress from rules with optional TLS config and ingress class",
+      description:
+        "Create an ingress from rules with optional TLS config and ingress class",
       arguments: z.object({
         ingressName: z.string(),
         rules: z.array(z.object({
@@ -162,7 +179,7 @@ export const model = {
       }),
       execute: async (args, context) => {
         const { networkingApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         const body = {
           metadata: {
@@ -171,7 +188,8 @@ export const model = {
             ...(args.annotations && { annotations: args.annotations }),
           },
           spec: {
-            ...(args.ingressClassName && { ingressClassName: args.ingressClassName }),
+            ...(args.ingressClassName &&
+              { ingressClassName: args.ingressClassName }),
             rules: args.rules.map((rule) => ({
               ...(rule.host && { host: rule.host }),
               http: {
@@ -191,7 +209,10 @@ export const model = {
           },
         };
 
-        const created = await networkingApi.createNamespacedIngress({ namespace: ns, body });
+        const created = await networkingApi.createNamespacedIngress({
+          namespace: ns,
+          body,
+        });
         const normalized = normalizeIngress(created);
 
         context.logger.info("Created ingress {name} in {ns}", {
@@ -209,7 +230,8 @@ export const model = {
     },
 
     update: {
-      description: "Update an ingress's rules, TLS config, or annotations via read-then-replace",
+      description:
+        "Update an ingress's rules, TLS config, or annotations via read-then-replace",
       arguments: z.object({
         ingressName: z.string(),
         rules: z.array(z.object({
@@ -229,9 +251,12 @@ export const model = {
       }),
       execute: async (args, context) => {
         const { networkingApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const current = await networkingApi.readNamespacedIngress({ name: args.ingressName, namespace: ns });
+        const current = await networkingApi.readNamespacedIngress({
+          name: args.ingressName,
+          namespace: ns,
+        });
 
         if (args.rules) {
           current.spec.rules = args.rules.map((rule) => ({
@@ -285,12 +310,16 @@ export const model = {
       description: "Delete an ingress",
       arguments: z.object({
         ingressName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { networkingApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        await networkingApi.deleteNamespacedIngress({ name: args.ingressName, namespace: ns });
+        await networkingApi.deleteNamespacedIngress({
+          name: args.ingressName,
+          namespace: ns,
+        });
 
         context.logger.info("Deleted ingress {name} in {ns}", {
           name: args.ingressName,

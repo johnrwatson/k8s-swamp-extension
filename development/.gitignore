@@ -10,8 +10,8 @@ minikube-*
 debug-challenge.yaml
 
 # Workflow run history
-workflows/*/runs/
-workflows/*/latest
+workflows/**/runs/
+workflows/**/latest
 
 # macOS
 .DS_Store

@@ -1,5 +1,10 @@
 import { z } from "npm:zod@4";
-import { buildClient, K8sGlobalArgsSchema, normalizeMeta, sanitizeInstanceName } from "./_helpers.ts";
+import {
+  buildClient,
+  K8sGlobalArgsSchema,
+  normalizeMeta,
+  sanitizeInstanceName,
+} from "./_helpers.ts";
 
 // --- Schemas ---
 
@@ -30,7 +35,7 @@ const ContainerSchema = z.object({
 
 const VolumeSchema = z.object({
   name: z.string(),
-  type: z.string(),
+  kind: z.string(),
   source: z.string(),
 });
 
@@ -76,12 +81,36 @@ const ReplicaSetSchema = z.object({
 // --- Helpers ---
 
 function normalizeVolume(vol) {
-  if (vol.configMap) return { name: vol.name, type: "configMap", source: vol.configMap.name || "" };
-  if (vol.secret) return { name: vol.name, type: "secret", source: vol.secret.secretName || "" };
-  if (vol.emptyDir) return { name: vol.name, type: "emptyDir", source: "" };
-  if (vol.persistentVolumeClaim) return { name: vol.name, type: "pvc", source: vol.persistentVolumeClaim.claimName || "" };
-  if (vol.hostPath) return { name: vol.name, type: "hostPath", source: vol.hostPath.path || "" };
-  return { name: vol.name, type: "unknown", source: "" };
+  if (vol.configMap) {
+    return {
+      name: vol.name,
+      kind: "configMap",
+      source: vol.configMap.name || "",
+    };
+  }
+  if (vol.secret) {
+    return {
+      name: vol.name,
+      kind: "secret",
+      source: vol.secret.secretName || "",
+    };
+  }
+  if (vol.emptyDir) return { name: vol.name, kind: "emptyDir", source: "" };
+  if (vol.persistentVolumeClaim) {
+    return {
+      name: vol.name,
+      kind: "pvc",
+      source: vol.persistentVolumeClaim.claimName || "",
+    };
+  }
+  if (vol.hostPath) {
+    return {
+      name: vol.name,
+      kind: "hostPath",
+      source: vol.hostPath.path || "",
+    };
+  }
+  return { name: vol.name, kind: "unknown", source: "" };
 }
 
 function normalizeContainer(c) {
@@ -140,7 +169,9 @@ function normalizeDeployment(raw) {
       status: c.status || "",
       reason: c.reason || "",
       message: c.message || "",
-      lastTransitionTime: c.lastTransitionTime ? new Date(c.lastTransitionTime).toISOString() : "",
+      lastTransitionTime: c.lastTransitionTime
+        ? new Date(c.lastTransitionTime).toISOString()
+        : "",
     })),
     containers: (templateSpec.containers || []).map(normalizeContainer),
     volumes: (templateSpec.volumes || []).map(normalizeVolume),
@@ -151,7 +182,6 @@ function normalizeDeployment(raw) {
 
 function normalizeReplicaSet(raw) {
   const meta = normalizeMeta(raw);
-  const spec = raw.spec || {};
   const status = raw.status || {};
   const ownerRefs = raw.metadata?.ownerReferences || [];
   const deployOwner = ownerRefs.find((o) => o.kind === "Deployment");
@@ -168,18 +198,20 @@ function normalizeReplicaSet(raw) {
 // --- Model ---
 
 export const model = {
-  type: "@swamp_lord/deployment",
+  type: "@john/deployment",
   version: "2026.02.27.1",
   globalArguments: K8sGlobalArgsSchema,
   resources: {
     deployment: {
-      description: "Deployment spec with replicas, strategy, containers, volumes, security contexts, and rollout conditions",
+      description:
+        "Deployment spec with replicas, strategy, containers, volumes, security contexts, and rollout conditions",
       schema: DeploymentSchema,
       lifetime: "infinite",
       garbageCollection: 10,
     },
     replicaSet: {
-      description: "ReplicaSet showing replica counts, owner deployment, and revision number",
+      description:
+        "ReplicaSet showing replica counts, owner deployment, and revision number",
       schema: ReplicaSetSchema,
       lifetime: "1h",
       garbageCollection: 10,
@@ -187,14 +219,18 @@ export const model = {
   },
   methods: {
     list: {
-      description: "List all deployments in the configured namespace with replicas, strategy, containers, and conditions",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      description:
+        "List all deployments in the configured namespace with replicas, strategy, containers, and conditions",
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { appsApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
         const labels = context.globalArgs.labels;
 
-        const resp = await appsApi.listNamespacedDeployment({ namespace: ns, labelSelector: labels });
+        const resp = await appsApi.listNamespacedDeployment({
+          namespace: ns,
+          labelSelector: labels,
+        });
         const deployments = resp.items || [];
 
         context.logger.info("Found {count} deployments in {ns}", {
@@ -217,15 +253,20 @@ export const model = {
     },
 
     get: {
-      description: "Get a deployment's full spec including containers, volumes, security contexts, and rollout conditions",
+      description:
+        "Get a deployment's full spec including containers, volumes, security contexts, and rollout conditions",
       arguments: z.object({
         deploymentName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { appsApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const dep = await appsApi.readNamespacedDeployment({ name: args.deploymentName, namespace: ns });
+        const dep = await appsApi.readNamespacedDeployment({
+          name: args.deploymentName,
+          namespace: ns,
+        });
         const normalized = normalizeDeployment(dep);
 
         const handle = await context.writeResource(
@@ -238,16 +279,18 @@ export const model = {
     },
 
     create: {
-      description: "Create a deployment from a container image or full spec object",
+      description:
+        "Create a deployment from a container image or full spec object",
       arguments: z.object({
         deploymentName: z.string(),
         image: z.string().optional(),
         replicas: z.number().default(1),
         spec: z.any().optional(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { appsApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         let body;
         if (args.spec) {
@@ -273,7 +316,10 @@ export const model = {
           throw new Error("Either 'image' or 'spec' must be provided");
         }
 
-        const created = await appsApi.createNamespacedDeployment({ namespace: ns, body });
+        const created = await appsApi.createNamespacedDeployment({
+          namespace: ns,
+          body,
+        });
         const normalized = normalizeDeployment(created);
 
         context.logger.info("Created deployment {name} in {ns}", {
@@ -291,17 +337,22 @@ export const model = {
     },
 
     update: {
-      description: "Update a deployment's container image and/or replica count via read-then-replace",
+      description:
+        "Update a deployment's container image and/or replica count via read-then-replace",
       arguments: z.object({
         deploymentName: z.string(),
         image: z.string().optional(),
         replicas: z.number().optional(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { appsApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const current = await appsApi.readNamespacedDeployment({ name: args.deploymentName, namespace: ns });
+        const current = await appsApi.readNamespacedDeployment({
+          name: args.deploymentName,
+          namespace: ns,
+        });
 
         if (args.replicas !== undefined) {
           current.spec.replicas = args.replicas;
@@ -335,12 +386,16 @@ export const model = {
       description: "Delete a deployment",
       arguments: z.object({
         deploymentName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { appsApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        await appsApi.deleteNamespacedDeployment({ name: args.deploymentName, namespace: ns });
+        await appsApi.deleteNamespacedDeployment({
+          name: args.deploymentName,
+          namespace: ns,
+        });
 
         context.logger.info("Deleted deployment {name} in {ns}", {
           name: args.deploymentName,
@@ -355,12 +410,16 @@ export const model = {
       arguments: z.object({
         deploymentName: z.string(),
         replicas: z.number(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { appsApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const current = await appsApi.readNamespacedDeployment({ name: args.deploymentName, namespace: ns });
+        const current = await appsApi.readNamespacedDeployment({
+          name: args.deploymentName,
+          namespace: ns,
+        });
         current.spec.replicas = args.replicas;
 
         const replaced = await appsApi.replaceNamespacedDeployment({
@@ -385,15 +444,20 @@ export const model = {
     },
 
     restart: {
-      description: "Trigger a rolling restart by setting the restartedAt annotation on the pod template",
+      description:
+        "Trigger a rolling restart by setting the restartedAt annotation on the pod template",
       arguments: z.object({
         deploymentName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { appsApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const current = await appsApi.readNamespacedDeployment({ name: args.deploymentName, namespace: ns });
+        const current = await appsApi.readNamespacedDeployment({
+          name: args.deploymentName,
+          namespace: ns,
+        });
 
         if (!current.spec.template.metadata) {
           current.spec.template.metadata = {};
@@ -401,8 +465,9 @@ export const model = {
         if (!current.spec.template.metadata.annotations) {
           current.spec.template.metadata.annotations = {};
         }
-        current.spec.template.metadata.annotations["kubectl.kubernetes.io/restartedAt"] =
-          new Date().toISOString();
+        current.spec.template.metadata
+          .annotations["kubectl.kubernetes.io/restartedAt"] = new Date()
+            .toISOString();
 
         const replaced = await appsApi.replaceNamespacedDeployment({
           name: args.deploymentName,
@@ -428,12 +493,16 @@ export const model = {
       description: "Pause a deployment's rollout by setting spec.paused = true",
       arguments: z.object({
         deploymentName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { appsApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const current = await appsApi.readNamespacedDeployment({ name: args.deploymentName, namespace: ns });
+        const current = await appsApi.readNamespacedDeployment({
+          name: args.deploymentName,
+          namespace: ns,
+        });
         current.spec.paused = true;
 
         const replaced = await appsApi.replaceNamespacedDeployment({
@@ -443,7 +512,9 @@ export const model = {
         });
         const normalized = normalizeDeployment(replaced);
 
-        context.logger.info("Paused deployment {name}", { name: args.deploymentName });
+        context.logger.info("Paused deployment {name}", {
+          name: args.deploymentName,
+        });
 
         const handle = await context.writeResource(
           "deployment",
@@ -455,15 +526,20 @@ export const model = {
     },
 
     resume: {
-      description: "Resume a paused deployment's rollout by setting spec.paused = false",
+      description:
+        "Resume a paused deployment's rollout by setting spec.paused = false",
       arguments: z.object({
         deploymentName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { appsApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const current = await appsApi.readNamespacedDeployment({ name: args.deploymentName, namespace: ns });
+        const current = await appsApi.readNamespacedDeployment({
+          name: args.deploymentName,
+          namespace: ns,
+        });
         current.spec.paused = false;
 
         const replaced = await appsApi.replaceNamespacedDeployment({
@@ -473,7 +549,9 @@ export const model = {
         });
         const normalized = normalizeDeployment(replaced);
 
-        context.logger.info("Resumed deployment {name}", { name: args.deploymentName });
+        context.logger.info("Resumed deployment {name}", {
+          name: args.deploymentName,
+        });
 
         const handle = await context.writeResource(
           "deployment",
@@ -485,20 +563,26 @@ export const model = {
     },
 
     getRolloutStatus: {
-      description: "Get a deployment's rollout status with Available, Progressing, and ReplicaFailure conditions",
+      description:
+        "Get a deployment's rollout status with Available, Progressing, and ReplicaFailure conditions",
       arguments: z.object({
         deploymentName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { appsApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const dep = await appsApi.readNamespacedDeployment({ name: args.deploymentName, namespace: ns });
+        const dep = await appsApi.readNamespacedDeployment({
+          name: args.deploymentName,
+          namespace: ns,
+        });
         const normalized = normalizeDeployment(dep);
 
         context.logger.info("Rollout status for {name}: {conditions}", {
           name: args.deploymentName,
-          conditions: normalized.conditions.map((c) => `${c.type}=${c.status}`).join(", "),
+          conditions: normalized.conditions.map((c) => `${c.type}=${c.status}`)
+            .join(", "),
         });
 
         const handle = await context.writeResource(
@@ -511,13 +595,15 @@ export const model = {
     },
 
     getReplicaSets: {
-      description: "List ReplicaSets owned by a deployment, showing rollout history and revisions",
+      description:
+        "List ReplicaSets owned by a deployment, showing rollout history and revisions",
       arguments: z.object({
         deploymentName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { appsApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         const resp = await appsApi.listNamespacedReplicaSet({ namespace: ns });
         const allRs = resp.items || [];
@@ -525,7 +611,9 @@ export const model = {
         // Filter to ReplicaSets owned by this deployment
         const owned = allRs.filter((rs) => {
           const owners = rs.metadata?.ownerReferences || [];
-          return owners.some((o) => o.kind === "Deployment" && o.name === args.deploymentName);
+          return owners.some((o) =>
+            o.kind === "Deployment" && o.name === args.deploymentName
+          );
         });
 
         context.logger.info("Found {count} ReplicaSets for deployment {name}", {

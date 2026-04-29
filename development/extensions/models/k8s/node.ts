@@ -1,5 +1,9 @@
 import { z } from "npm:zod@4";
-import { buildClient, normalizeMeta, sanitizeInstanceName } from "./_helpers.ts";
+import {
+  buildClient,
+  normalizeMeta,
+  sanitizeInstanceName,
+} from "./_helpers.ts";
 
 // --- Global Args (cluster-scoped, no namespace) ---
 
@@ -102,7 +106,9 @@ function normalizeNode(raw) {
       status: c.status || "",
       reason: c.reason || "",
       message: c.message || "",
-      lastTransitionTime: c.lastTransitionTime ? new Date(c.lastTransitionTime).toISOString() : "",
+      lastTransitionTime: c.lastTransitionTime
+        ? new Date(c.lastTransitionTime).toISOString()
+        : "",
     })),
     capacityCpu: capacity.cpu || "",
     capacityMemory: capacity.memory || "",
@@ -142,7 +148,10 @@ function normalizePodForNode(raw) {
     image: cs.image || "",
   }));
 
-  const totalRestarts = containerStatuses.reduce((sum, cs) => sum + cs.restartCount, 0);
+  const totalRestarts = containerStatuses.reduce(
+    (sum, cs) => sum + cs.restartCount,
+    0,
+  );
 
   return {
     ...meta,
@@ -163,12 +172,13 @@ function normalizePodForNode(raw) {
 // --- Model ---
 
 export const model = {
-  type: "@swamp_lord/node",
+  type: "@john/node",
   version: "2026.02.27.1",
   globalArguments: NodeGlobalArgsSchema,
   resources: {
     node: {
-      description: "Node with conditions, capacity, allocatable resources, taints, and node info",
+      description:
+        "Node with conditions, capacity, allocatable resources, taints, and node info",
       schema: NodeSchema,
       lifetime: "infinite",
       garbageCollection: 10,
@@ -188,7 +198,8 @@ export const model = {
   },
   methods: {
     list: {
-      description: "List all nodes with status, capacity, conditions, and taints",
+      description:
+        "List all nodes with status, capacity, conditions, and taints",
       arguments: z.object({}),
       execute: async (_args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
@@ -214,7 +225,8 @@ export const model = {
     },
 
     get: {
-      description: "Get a node's full status including conditions, capacity, taints, and node info",
+      description:
+        "Get a node's full status including conditions, capacity, taints, and node info",
       arguments: z.object({
         nodeName: z.string(),
       }),
@@ -348,7 +360,9 @@ export const model = {
         }
 
         // Remove existing taint with the same key if any
-        current.spec.taints = current.spec.taints.filter((t) => t.key !== args.key);
+        current.spec.taints = current.spec.taints.filter((t) =>
+          t.key !== args.key
+        );
         current.spec.taints.push({
           key: args.key,
           value: args.value,
@@ -361,12 +375,15 @@ export const model = {
         });
         const normalized = normalizeNode(replaced);
 
-        context.logger.info("Added taint {key}={value}:{effect} to node {name}", {
-          key: args.key,
-          value: args.value,
-          effect: args.effect,
-          name: args.nodeName,
-        });
+        context.logger.info(
+          "Added taint {key}={value}:{effect} to node {name}",
+          {
+            key: args.key,
+            value: args.value,
+            effect: args.effect,
+            name: args.nodeName,
+          },
+        );
 
         const handle = await context.writeResource(
           "node",
@@ -388,7 +405,9 @@ export const model = {
 
         const current = await coreApi.readNode({ name: args.nodeName });
         if (current.spec.taints) {
-          current.spec.taints = current.spec.taints.filter((t) => t.key !== args.key);
+          current.spec.taints = current.spec.taints.filter((t) =>
+            t.key !== args.key
+          );
         }
 
         const replaced = await coreApi.replaceNode({
@@ -412,7 +431,8 @@ export const model = {
     },
 
     getPodsOnNode: {
-      description: "List all pods running on a specific node across all namespaces",
+      description:
+        "List all pods running on a specific node across all namespaces",
       arguments: z.object({
         nodeName: z.string(),
       }),

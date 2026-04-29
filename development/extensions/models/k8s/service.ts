@@ -133,24 +133,27 @@ function normalizeEndpoints(raw) {
 // --- Model ---
 
 export const model = {
-  type: "@swamp_lord/service",
+  type: "@john/service",
   version: "2026.02.27.1",
   globalArguments: K8sGlobalArgsSchema,
   resources: {
     service: {
-      description: "Service spec including type, clusterIP, ports, and pod selector labels",
+      description:
+        "Service spec including type, clusterIP, ports, and pod selector labels",
       schema: ServiceSchema,
       lifetime: "infinite",
       garbageCollection: 10,
     },
     endpoints: {
-      description: "Endpoint addresses backing a service, split into ready and not-ready",
+      description:
+        "Endpoint addresses backing a service, split into ready and not-ready",
       schema: EndpointsSchema,
       lifetime: "1h",
       garbageCollection: 5,
     },
     diagnosis: {
-      description: "Service diagnosis comparing selector vs pod labels, port analysis, and health status",
+      description:
+        "Service diagnosis comparing selector vs pod labels, port analysis, and health status",
       schema: DiagnosisSchema,
       lifetime: "1h",
       garbageCollection: 5,
@@ -158,14 +161,18 @@ export const model = {
   },
   methods: {
     list: {
-      description: "List all services in the configured namespace with their type, ports, and selectors",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      description:
+        "List all services in the configured namespace with their type, ports, and selectors",
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
         const labels = context.globalArgs.labels;
 
-        const resp = await coreApi.listNamespacedService({ namespace: ns, labelSelector: labels });
+        const resp = await coreApi.listNamespacedService({
+          namespace: ns,
+          labelSelector: labels,
+        });
         const services = resp.items || [];
 
         context.logger.info("Found {count} services in {ns}", {
@@ -188,15 +195,20 @@ export const model = {
     },
 
     get: {
-      description: "Get a single service's spec including type, clusterIP, ports, and pod selector",
+      description:
+        "Get a single service's spec including type, clusterIP, ports, and pod selector",
       arguments: z.object({
         serviceName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const svc = await coreApi.readNamespacedService({ name: args.serviceName, namespace: ns });
+        const svc = await coreApi.readNamespacedService({
+          name: args.serviceName,
+          namespace: ns,
+        });
         const normalized = normalizeService(svc);
 
         const handle = await context.writeResource(
@@ -209,22 +221,30 @@ export const model = {
     },
 
     getEndpoints: {
-      description: "Get the endpoint addresses backing a service, showing which pods are ready and not ready",
+      description:
+        "Get the endpoint addresses backing a service, showing which pods are ready and not ready",
       arguments: z.object({
         serviceName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const ep = await coreApi.readNamespacedEndpoints({ name: args.serviceName, namespace: ns });
+        const ep = await coreApi.readNamespacedEndpoints({
+          name: args.serviceName,
+          namespace: ns,
+        });
         const normalized = normalizeEndpoints(ep);
 
-        context.logger.info("Endpoints for {svc}: {ready} ready, {notReady} not ready", {
-          svc: args.serviceName,
-          ready: normalized.totalReady,
-          notReady: normalized.totalNotReady,
-        });
+        context.logger.info(
+          "Endpoints for {svc}: {ready} ready, {notReady} not ready",
+          {
+            svc: args.serviceName,
+            ready: normalized.totalReady,
+            notReady: normalized.totalNotReady,
+          },
+        );
 
         const handle = await context.writeResource(
           "endpoints",
@@ -236,7 +256,8 @@ export const model = {
     },
 
     create: {
-      description: "Create a service with selector, ports, and optional type and labels",
+      description:
+        "Create a service with selector, ports, and optional type and labels",
       arguments: z.object({
         serviceName: z.string(),
         selector: z.record(z.string(), z.string()),
@@ -251,7 +272,7 @@ export const model = {
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         const body = {
           metadata: {
@@ -271,7 +292,10 @@ export const model = {
           },
         };
 
-        const created = await coreApi.createNamespacedService({ namespace: ns, body });
+        const created = await coreApi.createNamespacedService({
+          namespace: ns,
+          body,
+        });
         const normalized = normalizeService(created);
 
         context.logger.info("Created service {name} in {ns}", {
@@ -289,7 +313,8 @@ export const model = {
     },
 
     update: {
-      description: "Update a service's selector and/or ports via read-then-replace",
+      description:
+        "Update a service's selector and/or ports via read-then-replace",
       arguments: z.object({
         serviceName: z.string(),
         selector: z.record(z.string(), z.string()).optional(),
@@ -302,9 +327,12 @@ export const model = {
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const current = await coreApi.readNamespacedService({ name: args.serviceName, namespace: ns });
+        const current = await coreApi.readNamespacedService({
+          name: args.serviceName,
+          namespace: ns,
+        });
 
         if (args.selector) {
           current.spec.selector = args.selector;
@@ -343,12 +371,16 @@ export const model = {
       description: "Delete a service",
       arguments: z.object({
         serviceName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        await coreApi.deleteNamespacedService({ name: args.serviceName, namespace: ns });
+        await coreApi.deleteNamespacedService({
+          name: args.serviceName,
+          namespace: ns,
+        });
 
         context.logger.info("Deleted service {name} in {ns}", {
           name: args.serviceName,
@@ -359,29 +391,41 @@ export const model = {
     },
 
     diagnoseService: {
-      description: "Diagnose a service by comparing its selector against pod labels, reporting mismatches and port analysis",
+      description:
+        "Diagnose a service by comparing its selector against pod labels, reporting mismatches and port analysis",
       arguments: z.object({
         serviceName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         // 1. Read service to get selector and ports
-        const svc = await coreApi.readNamespacedService({ name: args.serviceName, namespace: ns });
+        const svc = await coreApi.readNamespacedService({
+          name: args.serviceName,
+          namespace: ns,
+        });
         const svcSpec = svc.spec || {};
         const selector = svcSpec.selector || {};
         const svcPorts = svcSpec.ports || [];
 
         const selectorKeys = Object.keys(selector);
         if (selectorKeys.length === 0) {
-          context.logger.warning("Service {name} has no selector", { name: args.serviceName });
+          context.logger.warning("Service {name} has no selector", {
+            name: args.serviceName,
+          });
         }
 
         // 2. List pods matching the full selector
-        const selectorStr = selectorKeys.map((k) => `${k}=${selector[k]}`).join(",");
+        const selectorStr = selectorKeys.map((k) => `${k}=${selector[k]}`).join(
+          ",",
+        );
         const matchedResp = selectorStr
-          ? await coreApi.listNamespacedPod({ namespace: ns, labelSelector: selectorStr })
+          ? await coreApi.listNamespacedPod({
+            namespace: ns,
+            labelSelector: selectorStr,
+          })
           : { items: [] };
         const matchedPods = matchedResp.items || [];
         const matchedPodNames = matchedPods.map((p) => p.metadata?.name || "");
@@ -401,7 +445,9 @@ export const model = {
           // Check if pod has at least one selector label but not all
           const hasAny = selectorKeys.some((k) => podLabels[k] === selector[k]);
           if (hasAny) {
-            const missingLabels = selectorKeys.filter((k) => podLabels[k] !== selector[k]);
+            const missingLabels = selectorKeys.filter((k) =>
+              podLabels[k] !== selector[k]
+            );
             unmatchedPods.push({ name: podName, missingLabels });
           }
         }
@@ -416,7 +462,8 @@ export const model = {
             const containers = pod.spec?.containers || [];
             const hasPort = containers.some((c) =>
               (c.ports || []).some((p) =>
-                p.containerPort === targetPortNum || String(p.containerPort) === targetPort
+                p.containerPort === targetPortNum ||
+                String(p.containerPort) === targetPort
               )
             );
             if (hasPort) listeningPodCount++;
@@ -430,8 +477,11 @@ export const model = {
         });
 
         // 5. Determine health
-        const allPortsHaveListeners = portAnalysis.every((p) => p.listeningPodCount > 0);
-        const healthy = matchedPods.length > 0 && unmatchedPods.length === 0 && allPortsHaveListeners;
+        const allPortsHaveListeners = portAnalysis.every((p) =>
+          p.listeningPodCount > 0
+        );
+        const healthy = matchedPods.length > 0 && unmatchedPods.length === 0 &&
+          allPortsHaveListeners;
 
         const diagnosis = {
           serviceName: args.serviceName,

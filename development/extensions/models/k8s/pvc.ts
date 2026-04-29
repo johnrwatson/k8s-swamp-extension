@@ -1,5 +1,10 @@
 import { z } from "npm:zod@4";
-import { buildClient, K8sGlobalArgsSchema, normalizeMeta, sanitizeInstanceName } from "./_helpers.ts";
+import {
+  buildClient,
+  K8sGlobalArgsSchema,
+  normalizeMeta,
+  sanitizeInstanceName,
+} from "./_helpers.ts";
 
 // --- Schemas ---
 
@@ -67,8 +72,11 @@ function normalizePv(raw) {
   else if (spec.nfs) source = `nfs:${spec.nfs.server}:${spec.nfs.path}`;
   else if (spec.csi) source = `csi:${spec.csi.driver}`;
   else if (spec.local) source = `local:${spec.local.path}`;
-  else if (spec.awsElasticBlockStore) source = `ebs:${spec.awsElasticBlockStore.volumeID}`;
-  else if (spec.gcePersistentDisk) source = `gce-pd:${spec.gcePersistentDisk.pdName}`;
+  else if (spec.awsElasticBlockStore) {
+    source = `ebs:${spec.awsElasticBlockStore.volumeID}`;
+  } else if (spec.gcePersistentDisk) {
+    source = `gce-pd:${spec.gcePersistentDisk.pdName}`;
+  }
 
   return {
     name: meta.name,
@@ -90,18 +98,20 @@ function normalizePv(raw) {
 // --- Model ---
 
 export const model = {
-  type: "@swamp_lord/pvc",
+  type: "@john/pvc",
   version: "2026.02.27.1",
   globalArguments: K8sGlobalArgsSchema,
   resources: {
     pvc: {
-      description: "PersistentVolumeClaim with phase, storage class, capacity, access modes, and bound volume",
+      description:
+        "PersistentVolumeClaim with phase, storage class, capacity, access modes, and bound volume",
       schema: PvcSchema,
       lifetime: "infinite",
       garbageCollection: 10,
     },
     pv: {
-      description: "PersistentVolume with phase, capacity, reclaim policy, and volume source",
+      description:
+        "PersistentVolume with phase, capacity, reclaim policy, and volume source",
       schema: PvSchema,
       lifetime: "infinite",
       garbageCollection: 10,
@@ -109,22 +119,33 @@ export const model = {
   },
   methods: {
     list: {
-      description: "List all PersistentVolumeClaims in the namespace with binding status, storage class, and capacity",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      description:
+        "List all PersistentVolumeClaims in the namespace with binding status, storage class, and capacity",
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
         const labels = context.globalArgs.labels;
 
-        const resp = await coreApi.listNamespacedPersistentVolumeClaim({ namespace: ns, labelSelector: labels });
+        const resp = await coreApi.listNamespacedPersistentVolumeClaim({
+          namespace: ns,
+          labelSelector: labels,
+        });
         const pvcs = resp.items || [];
 
-        context.logger.info("Found {count} PVCs in {ns}", { count: pvcs.length, ns });
+        context.logger.info("Found {count} PVCs in {ns}", {
+          count: pvcs.length,
+          ns,
+        });
 
         const handles = [];
         for (const pvc of pvcs) {
           const normalized = normalizePvc(pvc);
-          const handle = await context.writeResource("pvc", sanitizeInstanceName(normalized.name), normalized);
+          const handle = await context.writeResource(
+            "pvc",
+            sanitizeInstanceName(normalized.name),
+            normalized,
+          );
           handles.push(handle);
         }
         return { dataHandles: handles };
@@ -132,33 +153,44 @@ export const model = {
     },
 
     get: {
-      description: "Get a PVC's binding status, storage class, requested vs actual capacity, and access modes",
+      description:
+        "Get a PVC's binding status, storage class, requested vs actual capacity, and access modes",
       arguments: z.object({
         pvcName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const pvc = await coreApi.readNamespacedPersistentVolumeClaim({ name: args.pvcName, namespace: ns });
+        const pvc = await coreApi.readNamespacedPersistentVolumeClaim({
+          name: args.pvcName,
+          namespace: ns,
+        });
         const normalized = normalizePvc(pvc);
 
-        const handle = await context.writeResource("pvc", sanitizeInstanceName(normalized.name), normalized);
+        const handle = await context.writeResource(
+          "pvc",
+          sanitizeInstanceName(normalized.name),
+          normalized,
+        );
         return { dataHandles: [handle] };
       },
     },
 
     create: {
-      description: "Create a PVC with storage class, access mode, and requested capacity",
+      description:
+        "Create a PVC with storage class, access mode, and requested capacity",
       arguments: z.object({
         pvcName: z.string(),
         storageClassName: z.string(),
         storage: z.string(),
         accessModes: z.array(z.string()).default(["ReadWriteOnce"]),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         const body = {
           metadata: { name: args.pvcName, namespace: ns },
@@ -169,12 +201,22 @@ export const model = {
           },
         };
 
-        const created = await coreApi.createNamespacedPersistentVolumeClaim({ namespace: ns, body });
+        const created = await coreApi.createNamespacedPersistentVolumeClaim({
+          namespace: ns,
+          body,
+        });
         const normalized = normalizePvc(created);
 
-        context.logger.info("Created PVC {name} in {ns}", { name: args.pvcName, ns });
+        context.logger.info("Created PVC {name} in {ns}", {
+          name: args.pvcName,
+          ns,
+        });
 
-        const handle = await context.writeResource("pvc", sanitizeInstanceName(normalized.name), normalized);
+        const handle = await context.writeResource(
+          "pvc",
+          sanitizeInstanceName(normalized.name),
+          normalized,
+        );
         return { dataHandles: [handle] };
       },
     },
@@ -183,20 +225,28 @@ export const model = {
       description: "Delete a PersistentVolumeClaim",
       arguments: z.object({
         pvcName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        await coreApi.deleteNamespacedPersistentVolumeClaim({ name: args.pvcName, namespace: ns });
+        await coreApi.deleteNamespacedPersistentVolumeClaim({
+          name: args.pvcName,
+          namespace: ns,
+        });
 
-        context.logger.info("Deleted PVC {name} in {ns}", { name: args.pvcName, ns });
+        context.logger.info("Deleted PVC {name} in {ns}", {
+          name: args.pvcName,
+          ns,
+        });
         return { dataHandles: [] };
       },
     },
 
     listVolumes: {
-      description: "List all PersistentVolumes in the cluster with phase, capacity, reclaim policy, and source",
+      description:
+        "List all PersistentVolumes in the cluster with phase, capacity, reclaim policy, and source",
       arguments: z.object({}),
       execute: async (_args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
@@ -204,12 +254,18 @@ export const model = {
         const resp = await coreApi.listPersistentVolume();
         const pvs = resp.items || [];
 
-        context.logger.info("Found {count} PersistentVolumes", { count: pvs.length });
+        context.logger.info("Found {count} PersistentVolumes", {
+          count: pvs.length,
+        });
 
         const handles = [];
         for (const pv of pvs) {
           const normalized = normalizePv(pv);
-          const handle = await context.writeResource("pv", sanitizeInstanceName(normalized.name), normalized);
+          const handle = await context.writeResource(
+            "pv",
+            sanitizeInstanceName(normalized.name),
+            normalized,
+          );
           handles.push(handle);
         }
         return { dataHandles: handles };

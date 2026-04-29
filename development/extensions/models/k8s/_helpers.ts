@@ -1,7 +1,12 @@
 import { z } from "npm:zod@4";
 import * as k8s from "npm:@kubernetes/client-node@1.0.0";
+import process from "node:process";
 
-// Shared global arguments for all @swamp_lord/* models
+// Suppress MaxListeners warning — @kubernetes/client-node registers multiple
+// listeners per API client, which is expected across 15 model types.
+process.setMaxListeners(0);
+
+// Shared global arguments for all @john/* models
 export const K8sGlobalArgsSchema = z.object({
   namespace: z.string().default("default"),
   context: z.string().optional(),
@@ -40,7 +45,16 @@ export function buildClient(globalArgs) {
   const rbacApi = kc.makeApiClient(k8s.RbacAuthorizationV1Api);
   const metricsClient = new k8s.Metrics(kc);
 
-  return { kc, coreApi, appsApi, batchApi, networkingApi, autoscalingApi, rbacApi, metricsClient };
+  return {
+    kc,
+    coreApi,
+    appsApi,
+    batchApi,
+    networkingApi,
+    autoscalingApi,
+    rbacApi,
+    metricsClient,
+  };
 }
 
 // Extract common metadata from any K8s object

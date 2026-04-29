@@ -1,5 +1,9 @@
 import { z } from "npm:zod@4";
-import { buildClient, K8sGlobalArgsSchema, sanitizeInstanceName } from "./_helpers.ts";
+import {
+  buildClient,
+  K8sGlobalArgsSchema,
+  sanitizeInstanceName,
+} from "./_helpers.ts";
 
 // --- Schemas ---
 
@@ -40,8 +44,12 @@ function normalizeEvent(raw) {
     involvedObjectNamespace: obj.namespace || "",
     involvedObjectUid: obj.uid || "",
     count: raw.count || 1,
-    firstTimestamp: raw.firstTimestamp ? new Date(raw.firstTimestamp).toISOString() : "",
-    lastTimestamp: raw.lastTimestamp ? new Date(raw.lastTimestamp).toISOString() : "",
+    firstTimestamp: raw.firstTimestamp
+      ? new Date(raw.firstTimestamp).toISOString()
+      : "",
+    lastTimestamp: raw.lastTimestamp
+      ? new Date(raw.lastTimestamp).toISOString()
+      : "",
     sourceComponent: source.component || "",
     sourceHost: source.host || "",
   };
@@ -71,12 +79,13 @@ async function writeEvents(events, context) {
 // --- Model ---
 
 export const model = {
-  type: "@swamp_lord/event",
+  type: "@john/event",
   version: "2026.02.27.1",
   globalArguments: K8sGlobalArgsSchema,
   resources: {
     event: {
-      description: "Kubernetes event with type, reason, message, involved object, count, and timestamps",
+      description:
+        "Kubernetes event with type, reason, message, involved object, count, and timestamps",
       schema: EventSchema,
       lifetime: "1h",
       garbageCollection: 10,
@@ -84,11 +93,12 @@ export const model = {
   },
   methods: {
     list: {
-      description: "List all events in the namespace, sorted by lastTimestamp descending",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      description:
+        "List all events in the namespace, sorted by lastTimestamp descending",
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         const resp = await coreApi.listNamespacedEvent({ namespace: ns });
         const events = (resp.items || []).map(normalizeEvent);
@@ -105,17 +115,20 @@ export const model = {
     },
 
     getForPod: {
-      description: "Get events for a specific pod, sorted by lastTimestamp descending",
+      description:
+        "Get events for a specific pod, sorted by lastTimestamp descending",
       arguments: z.object({
         podName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         const resp = await coreApi.listNamespacedEvent({
           namespace: ns,
-          fieldSelector: `involvedObject.name=${args.podName},involvedObject.kind=Pod`,
+          fieldSelector:
+            `involvedObject.name=${args.podName},involvedObject.kind=Pod`,
         });
         const events = (resp.items || []).map(normalizeEvent);
         const sorted = sortByLastTimestampDesc(events);
@@ -131,17 +144,20 @@ export const model = {
     },
 
     getForDeployment: {
-      description: "Get events for a specific deployment, sorted by lastTimestamp descending",
+      description:
+        "Get events for a specific deployment, sorted by lastTimestamp descending",
       arguments: z.object({
         deploymentName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         const resp = await coreApi.listNamespacedEvent({
           namespace: ns,
-          fieldSelector: `involvedObject.name=${args.deploymentName},involvedObject.kind=Deployment`,
+          fieldSelector:
+            `involvedObject.name=${args.deploymentName},involvedObject.kind=Deployment`,
         });
         const events = (resp.items || []).map(normalizeEvent);
         const sorted = sortByLastTimestampDesc(events);
@@ -157,17 +173,20 @@ export const model = {
     },
 
     getForService: {
-      description: "Get events for a specific service, sorted by lastTimestamp descending",
+      description:
+        "Get events for a specific service, sorted by lastTimestamp descending",
       arguments: z.object({
         serviceName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         const resp = await coreApi.listNamespacedEvent({
           namespace: ns,
-          fieldSelector: `involvedObject.name=${args.serviceName},involvedObject.kind=Service`,
+          fieldSelector:
+            `involvedObject.name=${args.serviceName},involvedObject.kind=Service`,
         });
         const events = (resp.items || []).map(normalizeEvent);
         const sorted = sortByLastTimestampDesc(events);
@@ -183,11 +202,12 @@ export const model = {
     },
 
     getWarnings: {
-      description: "Get only Warning-type events in the namespace, sorted by lastTimestamp descending",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      description:
+        "Get only Warning-type events in the namespace, sorted by lastTimestamp descending",
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         const resp = await coreApi.listNamespacedEvent({
           namespace: ns,

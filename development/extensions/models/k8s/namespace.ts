@@ -59,6 +59,45 @@ const ResourceCountsSchema = z.object({
   collectedAt: z.string(),
 }).passthrough();
 
+const NamespaceHealthSchema = z.object({
+  namespace: z.string(),
+  healthy: z.boolean(),
+  summary: z.object({
+    deploymentsReady: z.number(),
+    deploymentsTotal: z.number(),
+    podsRunning: z.number(),
+    podsTotal: z.number(),
+    servicesHealthy: z.number(),
+    servicesTotal: z.number(),
+    warningCount: z.number(),
+  }),
+  deployments: z.array(z.object({
+    name: z.string(),
+    replicas: z.number(),
+    readyReplicas: z.number(),
+    ready: z.boolean(),
+  })),
+  pods: z.array(z.object({
+    name: z.string(),
+    phase: z.string(),
+    running: z.boolean(),
+  })),
+  services: z.array(z.object({
+    name: z.string(),
+    selector: z.record(z.string(), z.string()),
+    matchedPodCount: z.number(),
+    healthy: z.boolean(),
+    reason: z.string(),
+  })),
+  warnings: z.array(z.object({
+    name: z.string(),
+    reason: z.string(),
+    message: z.string(),
+    involvedObject: z.string(),
+  })),
+  collectedAt: z.string(),
+}).passthrough();
+
 // --- Helpers ---
 
 function normalizeNamespace(raw) {
@@ -135,40 +174,60 @@ function normalizeLimitRange(raw) {
 // --- Model ---
 
 export const model = {
-  type: "@swamp_lord/namespace",
-  version: "2026.02.26.1",
+  type: "@john/namespace",
+  version: "2026.04.29.1",
+  upgrades: [
+    {
+      fromVersion: "2026.02.26.1",
+      toVersion: "2026.04.29.1",
+      description: "Add aggregated health() method (no schema change)",
+      upgradeAttributes: (old) => old,
+    },
+  ],
   globalArguments: GlobalArgsSchema,
   resources: {
     namespace: {
-      description: "Namespace state including phase, finalizers, conditions, labels, and annotations",
+      description:
+        "Namespace state including phase, finalizers, conditions, labels, and annotations",
       schema: NamespaceSchema,
       lifetime: "infinite",
       garbageCollection: 10,
     },
     resourceQuota: {
-      description: "Resource quota showing hard limits and current usage for pods, CPU, memory, etc.",
+      description:
+        "Resource quota showing hard limits and current usage for pods, CPU, memory, etc.",
       schema: ResourceQuotaSchema,
       lifetime: "infinite",
       garbageCollection: 5,
     },
     limitRange: {
-      description: "Limit range defining default, min, and max resource constraints for containers in a namespace",
+      description:
+        "Limit range defining default, min, and max resource constraints for containers in a namespace",
       schema: LimitRangeSchema,
       lifetime: "infinite",
       garbageCollection: 5,
     },
     resourceCounts: {
-      description: "Count of pods, services, deployments, configmaps, secrets, service accounts, and PVCs in a namespace",
+      description:
+        "Count of pods, services, deployments, configmaps, secrets, service accounts, and PVCs in a namespace",
       schema: ResourceCountsSchema,
       lifetime: "1h",
       garbageCollection: 5,
+    },
+    namespaceHealth: {
+      description:
+        "Aggregated namespace health: per-deployment readiness, per-pod phase, per-service selector/port match, and Warning event count, plus a single top-level healthy boolean",
+      schema: NamespaceHealthSchema,
+      lifetime: "5m",
+      garbageCollection: 10,
     },
   },
   methods: {
     // --- Namespace CRUD ---
 
     list: {
-      description: "List all namespaces in the cluster, optionally filtered by label selector",
+      description:
+        "List all namespaces in the cluster, optionally filtered by label selector",
       arguments: z.object({}),
       execute: async (_args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
@@ -196,7 +255,8 @@ export const model = {
     },
 
     get: {
-      description: "Get a single namespace's phase, finalizers, conditions, labels, and annotations",
+      description:
+        "Get a single namespace's phase, finalizers, conditions, labels, and annotations",
       arguments: z.object({
         namespaceName: z.string(),
       }),
@@ -265,7 +325,8 @@ export const model = {
     },
 
     update: {
-      description: "Merge new labels and/or annotations onto a namespace via read-then-replace",
+      description:
+        "Merge new labels and/or annotations onto a namespace via read-then-replace",
       arguments: z.object({
         namespaceName: z.string(),
         labels: z.record(z.string(), z.string()).optional(),
@@ -275,14 +336,19 @@ export const model = {
         const { coreApi } = buildClient(context.globalArgs);
 
         // Read current state, merge in changes, replace
-        const current = await coreApi.readNamespace({ name: args.namespaceName });
+        const current = await coreApi.readNamespace({
+          name: args.namespaceName,
+        });
         const meta = current.metadata || {};
 
         if (args.labels) {
           meta.labels = { ...(meta.labels || {}), ...args.labels };
         }
         if (args.annotations) {
-          meta.annotations = { ...(meta.annotations || {}), ...args.annotations };
+          meta.annotations = {
+            ...(meta.annotations || {}),
+            ...args.annotations,
+          };
         }
         current.metadata = meta;
 
@@ -308,7 +374,8 @@ export const model = {
     // --- Resource Quotas ---
 
     getResourceQuotas: {
-      description: "List all resource quotas in a namespace showing hard limits and current usage",
+      description:
+        "List all resource quotas in a namespace showing hard limits and current usage",
       arguments: z.object({
         namespaceName: z.string(),
       }),
@@ -340,7 +407,8 @@ export const model = {
     },
 
     setResourceQuota: {
-      description: "Create or replace a resource quota with the given hard limits (pods, cpu, memory, etc.)",
+      description:
+        "Create or replace a resource quota with the given hard limits (pods, cpu, memory, etc.)",
       arguments: z.object({
         namespaceName: z.string(),
         quotaName: z.string(),
@@ -420,7 +488,8 @@ export const model = {
     // --- Limit Ranges ---
 
     getLimitRanges: {
-      description: "List all limit ranges in a namespace showing default, min, and max resource constraints",
+      description:
+        "List all limit ranges in a namespace showing default, min, and max resource constraints",
       arguments: z.object({
         namespaceName: z.string(),
       }),
@@ -452,7 +521,8 @@ export const model = {
     },
 
     setLimitRange: {
-      description: "Create or replace a limit range defining default, min, and max resource constraints per container type",
+      description:
+        "Create or replace a limit range defining default, min, and max resource constraints per container type",
       arguments: z.object({
         namespaceName: z.string(),
         limitRangeName: z.string(),
@@ -536,7 +606,8 @@ export const model = {
     // --- Resource Counts ---
 
     getResourceCounts: {
-      description: "Count pods, services, deployments, configmaps, secrets, service accounts, and PVCs in a namespace via parallel API calls",
+      description:
+        "Count pods, services, deployments, configmaps, secrets, service accounts, and PVCs in a namespace via parallel API calls",
       arguments: z.object({
         namespaceName: z.string(),
       }),
@@ -545,16 +616,37 @@ export const model = {
         const ns = args.namespaceName;
 
         // Run all counts in parallel
-        const [pods, services, deployments, configmaps, secrets, serviceaccounts, pvcs] =
-          await Promise.all([
-            coreApi.listNamespacedPod({ namespace: ns }).then((r) => r.items?.length || 0),
-            coreApi.listNamespacedService({ namespace: ns }).then((r) => r.items?.length || 0),
-            appsApi.listNamespacedDeployment({ namespace: ns }).then((r) => r.items?.length || 0).catch(() => 0),
-            coreApi.listNamespacedConfigMap({ namespace: ns }).then((r) => r.items?.length || 0),
-            coreApi.listNamespacedSecret({ namespace: ns }).then((r) => r.items?.length || 0),
-            coreApi.listNamespacedServiceAccount({ namespace: ns }).then((r) => r.items?.length || 0),
-            coreApi.listNamespacedPersistentVolumeClaim({ namespace: ns }).then((r) => r.items?.length || 0),
-          ]);
+        const [
+          pods,
+          services,
+          deployments,
+          configmaps,
+          secrets,
+          serviceaccounts,
+          pvcs,
+        ] = await Promise.all([
+          coreApi.listNamespacedPod({ namespace: ns }).then((r) =>
+            r.items?.length || 0
+          ),
+          coreApi.listNamespacedService({ namespace: ns }).then((r) =>
+            r.items?.length || 0
+          ),
+          appsApi.listNamespacedDeployment({ namespace: ns }).then((r) =>
+            r.items?.length || 0
+          ).catch(() => 0),
+          coreApi.listNamespacedConfigMap({ namespace: ns }).then((r) =>
+            r.items?.length || 0
+          ),
+          coreApi.listNamespacedSecret({ namespace: ns }).then((r) =>
+            r.items?.length || 0
+          ),
+          coreApi.listNamespacedServiceAccount({ namespace: ns }).then((r) =>
+            r.items?.length || 0
+          ),
+          coreApi.listNamespacedPersistentVolumeClaim({ namespace: ns }).then((
+            r,
+          ) => r.items?.length || 0),
+        ]);
 
         const counts = {
           namespace: ns,
@@ -577,6 +669,171 @@ export const model = {
           "resourceCounts",
           ns,
           counts,
+        );
+        return { dataHandles: [handle] };
+      },
+    },
+
+    // --- Aggregated Health ---
+
+    health: {
+      description:
+        "Single-call health aggregator. Returns {healthy: bool} plus per-resource breakdown for deployments, pods, services, and Warning events. Use this instead of fanning out across deployment/pod/service/event models when you just need to know whether a namespace is healthy.",
+      arguments: z.object({
+        namespaceName: z.string(),
+      }),
+      execute: async (args, context) => {
+        const { coreApi, appsApi } = buildClient(context.globalArgs);
+        const ns = args.namespaceName;
+
+        const [deployResp, podResp, svcResp, warnResp] = await Promise.all([
+          appsApi.listNamespacedDeployment({ namespace: ns }),
+          coreApi.listNamespacedPod({ namespace: ns }),
+          coreApi.listNamespacedService({ namespace: ns }),
+          coreApi.listNamespacedEvent({
+            namespace: ns,
+            fieldSelector: "type=Warning",
+          }),
+        ]);
+
+        const deployments = (deployResp.items || []).map((d) => {
+          const replicas = d.spec?.replicas ?? 0;
+          const ready = d.status?.readyReplicas ?? 0;
+          return {
+            name: d.metadata?.name || "",
+            replicas,
+            readyReplicas: ready,
+            ready: replicas > 0 && replicas === ready,
+          };
+        });
+
+        const allPods = podResp.items || [];
+        const pods = allPods.map((p) => ({
+          name: p.metadata?.name || "",
+          phase: p.status?.phase || "Unknown",
+          running: p.status?.phase === "Running",
+        }));
+
+        const services = (svcResp.items || []).map((svc) => {
+          const sel = svc.spec?.selector || {};
+          const ports = svc.spec?.ports || [];
+          const selKeys = Object.keys(sel);
+          const name = svc.metadata?.name || "";
+
+          if (selKeys.length === 0) {
+            return {
+              name,
+              selector: sel,
+              matchedPodCount: 0,
+              healthy: true,
+              reason: "no selector (headless or external)",
+            };
+          }
+
+          const matched = allPods.filter((p) => {
+            const lbl = p.metadata?.labels || {};
+            return selKeys.every((k) => lbl[k] === sel[k]);
+          });
+
+          if (matched.length === 0) {
+            return {
+              name,
+              selector: sel,
+              matchedPodCount: 0,
+              healthy: false,
+              reason: "selector matches no pods",
+            };
+          }
+
+          const portsWithoutListeners = ports.filter((sp) => {
+            const target = String(sp.targetPort || sp.port);
+            const targetNum = parseInt(target, 10);
+            return !matched.some((p) =>
+              (p.spec?.containers || []).some((c) =>
+                (c.ports || []).some((pc) =>
+                  pc.containerPort === targetNum ||
+                  String(pc.containerPort) === target
+                )
+              )
+            );
+          });
+
+          if (portsWithoutListeners.length > 0) {
+            const missing = portsWithoutListeners
+              .map((p) => p.targetPort || p.port)
+              .join(",");
+            return {
+              name,
+              selector: sel,
+              matchedPodCount: matched.length,
+              healthy: false,
+              reason: `no pod listens on targetPort(s): ${missing}`,
+            };
+          }
+
+          return {
+            name,
+            selector: sel,
+            matchedPodCount: matched.length,
+            healthy: true,
+            reason: "ok",
+          };
+        });
+
+        const warnings = (warnResp.items || []).map((e) => ({
+          name: e.metadata?.name || "",
+          reason: e.reason || "",
+          message: e.message || "",
+          involvedObject: `${e.involvedObject?.kind || ""}/${
+            e.involvedObject?.name || ""
+          }`,
+        }));
+
+        const summary = {
+          deploymentsReady: deployments.filter((d) => d.ready).length,
+          deploymentsTotal: deployments.length,
+          podsRunning: pods.filter((p) => p.running).length,
+          podsTotal: pods.length,
+          servicesHealthy: services.filter((s) => s.healthy).length,
+          servicesTotal: services.length,
+          warningCount: warnings.length,
+        };
+
+        const healthy = summary.deploymentsReady === summary.deploymentsTotal &&
+          summary.podsRunning === summary.podsTotal &&
+          summary.servicesHealthy === summary.servicesTotal &&
+          summary.warningCount === 0;
+
+        const health = {
+          namespace: ns,
+          healthy,
+          summary,
+          deployments,
+          pods,
+          services,
+          warnings,
+          collectedAt: new Date().toISOString(),
+        };
+
+        context.logger.info(
+          "Health for {ns}: healthy={healthy} ({dr}/{dt} deps ready, {pr}/{pt} pods running, {sh}/{st} svcs healthy, {wc} warnings)",
+          {
+            ns,
+            healthy,
+            dr: summary.deploymentsReady,
+            dt: summary.deploymentsTotal,
+            pr: summary.podsRunning,
+            pt: summary.podsTotal,
+            sh: summary.servicesHealthy,
+            st: summary.servicesTotal,
+            wc: summary.warningCount,
+          },
+        );
+
+        const handle = await context.writeResource(
+          "namespaceHealth",
+          ns,
+          health,
         );
         return { dataHandles: [handle] };
       },

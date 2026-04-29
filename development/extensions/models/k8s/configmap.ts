@@ -1,5 +1,10 @@
 import { z } from "npm:zod@4";
-import { buildClient, K8sGlobalArgsSchema, normalizeMeta, sanitizeInstanceName } from "./_helpers.ts";
+import {
+  buildClient,
+  K8sGlobalArgsSchema,
+  normalizeMeta,
+  sanitizeInstanceName,
+} from "./_helpers.ts";
 
 // --- Schemas ---
 
@@ -30,12 +35,13 @@ function normalizeConfigMap(raw) {
 // --- Model ---
 
 export const model = {
-  type: "@swamp_lord/configmap",
+  type: "@john/configmap",
   version: "2026.02.27.1",
   globalArguments: K8sGlobalArgsSchema,
   resources: {
     configmap: {
-      description: "ConfigMap with key-value data, data keys list, labels, and annotations",
+      description:
+        "ConfigMap with key-value data, data keys list, labels, and annotations",
       schema: ConfigMapSchema,
       lifetime: "infinite",
       garbageCollection: 10,
@@ -44,13 +50,16 @@ export const model = {
   methods: {
     list: {
       description: "List all configmaps in the configured namespace",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
         const labels = context.globalArgs.labels;
 
-        const resp = await coreApi.listNamespacedConfigMap({ namespace: ns, labelSelector: labels });
+        const resp = await coreApi.listNamespacedConfigMap({
+          namespace: ns,
+          labelSelector: labels,
+        });
         const configmaps = resp.items || [];
 
         context.logger.info("Found {count} configmaps in {ns}", {
@@ -76,12 +85,16 @@ export const model = {
       description: "Get a single configmap's data and metadata",
       arguments: z.object({
         configMapName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const cm = await coreApi.readNamespacedConfigMap({ name: args.configMapName, namespace: ns });
+        const cm = await coreApi.readNamespacedConfigMap({
+          name: args.configMapName,
+          namespace: ns,
+        });
         const normalized = normalizeConfigMap(cm);
 
         const handle = await context.writeResource(
@@ -94,15 +107,17 @@ export const model = {
     },
 
     create: {
-      description: "Create a configmap from key-value data pairs with optional labels",
+      description:
+        "Create a configmap from key-value data pairs with optional labels",
       arguments: z.object({
         configMapName: z.string(),
         data: z.record(z.string(), z.string()),
         labels: z.record(z.string(), z.string()).optional(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         const body = {
           metadata: {
@@ -113,7 +128,10 @@ export const model = {
           data: args.data,
         };
 
-        const created = await coreApi.createNamespacedConfigMap({ namespace: ns, body });
+        const created = await coreApi.createNamespacedConfigMap({
+          namespace: ns,
+          body,
+        });
         const normalized = normalizeConfigMap(created);
 
         context.logger.info("Created configmap {name} in {ns}", {
@@ -131,16 +149,21 @@ export const model = {
     },
 
     update: {
-      description: "Merge new keys into an existing configmap via read-then-replace",
+      description:
+        "Merge new keys into an existing configmap via read-then-replace",
       arguments: z.object({
         configMapName: z.string(),
         data: z.record(z.string(), z.string()),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const current = await coreApi.readNamespacedConfigMap({ name: args.configMapName, namespace: ns });
+        const current = await coreApi.readNamespacedConfigMap({
+          name: args.configMapName,
+          namespace: ns,
+        });
         current.data = { ...(current.data || {}), ...args.data };
 
         const replaced = await coreApi.replaceNamespacedConfigMap({
@@ -168,12 +191,16 @@ export const model = {
       description: "Delete a configmap",
       arguments: z.object({
         configMapName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        await coreApi.deleteNamespacedConfigMap({ name: args.configMapName, namespace: ns });
+        await coreApi.deleteNamespacedConfigMap({
+          name: args.configMapName,
+          namespace: ns,
+        });
 
         context.logger.info("Deleted configmap {name} in {ns}", {
           name: args.configMapName,

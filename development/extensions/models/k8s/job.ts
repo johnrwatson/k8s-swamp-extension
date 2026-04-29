@@ -1,5 +1,10 @@
 import { z } from "npm:zod@4";
-import { buildClient, K8sGlobalArgsSchema, normalizeMeta, sanitizeInstanceName } from "./_helpers.ts";
+import {
+  buildClient,
+  K8sGlobalArgsSchema,
+  normalizeMeta,
+  sanitizeInstanceName,
+} from "./_helpers.ts";
 
 // --- Schemas ---
 
@@ -64,11 +69,18 @@ function normalizeJob(raw) {
   const ownerRefs = raw.metadata?.ownerReferences || [];
   const cronOwner = ownerRefs.find((o) => o.kind === "CronJob");
 
-  const startTime = status.startTime ? new Date(status.startTime).toISOString() : "";
-  const completionTime = status.completionTime ? new Date(status.completionTime).toISOString() : "";
+  const startTime = status.startTime
+    ? new Date(status.startTime).toISOString()
+    : "";
+  const completionTime = status.completionTime
+    ? new Date(status.completionTime).toISOString()
+    : "";
   let durationSeconds = 0;
   if (startTime && completionTime) {
-    durationSeconds = Math.round((new Date(completionTime).getTime() - new Date(startTime).getTime()) / 1000);
+    durationSeconds = Math.round(
+      (new Date(completionTime).getTime() - new Date(startTime).getTime()) /
+        1000,
+    );
   }
 
   return {
@@ -87,7 +99,9 @@ function normalizeJob(raw) {
       status: c.status || "",
       reason: c.reason || "",
       message: c.message || "",
-      lastTransitionTime: c.lastTransitionTime ? new Date(c.lastTransitionTime).toISOString() : "",
+      lastTransitionTime: c.lastTransitionTime
+        ? new Date(c.lastTransitionTime).toISOString()
+        : "",
     })),
     containers: (templateSpec.containers || []).map((c) => ({
       name: c.name || "",
@@ -108,8 +122,12 @@ function normalizeCronJob(raw) {
     schedule: spec.schedule || "",
     suspend: spec.suspend || false,
     concurrencyPolicy: spec.concurrencyPolicy || "Allow",
-    lastScheduleTime: status.lastScheduleTime ? new Date(status.lastScheduleTime).toISOString() : "",
-    lastSuccessfulTime: status.lastSuccessfulTime ? new Date(status.lastSuccessfulTime).toISOString() : "",
+    lastScheduleTime: status.lastScheduleTime
+      ? new Date(status.lastScheduleTime).toISOString()
+      : "",
+    lastSuccessfulTime: status.lastSuccessfulTime
+      ? new Date(status.lastSuccessfulTime).toISOString()
+      : "",
     activeJobs: (status.active || []).length,
     successfulJobsHistoryLimit: spec.successfulJobsHistoryLimit ?? 3,
     failedJobsHistoryLimit: spec.failedJobsHistoryLimit ?? 1,
@@ -123,18 +141,20 @@ function normalizeCronJob(raw) {
 // --- Model ---
 
 export const model = {
-  type: "@swamp_lord/job",
+  type: "@john/job",
   version: "2026.02.27.1",
   globalArguments: K8sGlobalArgsSchema,
   resources: {
     job: {
-      description: "Job with completions, failures, duration, conditions, and owner CronJob reference",
+      description:
+        "Job with completions, failures, duration, conditions, and owner CronJob reference",
       schema: JobSchema,
       lifetime: "infinite",
       garbageCollection: 10,
     },
     cronJob: {
-      description: "CronJob with schedule, suspend status, concurrency policy, and last schedule/success times",
+      description:
+        "CronJob with schedule, suspend status, concurrency policy, and last schedule/success times",
       schema: CronJobSchema,
       lifetime: "infinite",
       garbageCollection: 10,
@@ -142,22 +162,33 @@ export const model = {
   },
   methods: {
     listJobs: {
-      description: "List all Jobs in the namespace with completion status, duration, and failure counts",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      description:
+        "List all Jobs in the namespace with completion status, duration, and failure counts",
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { batchApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
         const labels = context.globalArgs.labels;
 
-        const resp = await batchApi.listNamespacedJob({ namespace: ns, labelSelector: labels });
+        const resp = await batchApi.listNamespacedJob({
+          namespace: ns,
+          labelSelector: labels,
+        });
         const jobs = resp.items || [];
 
-        context.logger.info("Found {count} jobs in {ns}", { count: jobs.length, ns });
+        context.logger.info("Found {count} jobs in {ns}", {
+          count: jobs.length,
+          ns,
+        });
 
         const handles = [];
         for (const job of jobs) {
           const normalized = normalizeJob(job);
-          const handle = await context.writeResource("job", sanitizeInstanceName(normalized.name), normalized);
+          const handle = await context.writeResource(
+            "job",
+            sanitizeInstanceName(normalized.name),
+            normalized,
+          );
           handles.push(handle);
         }
         return { dataHandles: handles };
@@ -165,18 +196,27 @@ export const model = {
     },
 
     getJob: {
-      description: "Get a Job's full status including completions, failures, duration, conditions, and containers",
+      description:
+        "Get a Job's full status including completions, failures, duration, conditions, and containers",
       arguments: z.object({
         jobName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { batchApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const job = await batchApi.readNamespacedJob({ name: args.jobName, namespace: ns });
+        const job = await batchApi.readNamespacedJob({
+          name: args.jobName,
+          namespace: ns,
+        });
         const normalized = normalizeJob(job);
 
-        const handle = await context.writeResource("job", sanitizeInstanceName(normalized.name), normalized);
+        const handle = await context.writeResource(
+          "job",
+          sanitizeInstanceName(normalized.name),
+          normalized,
+        );
         return { dataHandles: [handle] };
       },
     },
@@ -185,10 +225,11 @@ export const model = {
       description: "Delete a Job and its pods",
       arguments: z.object({
         jobName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { batchApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         await batchApi.deleteNamespacedJob({
           name: args.jobName,
@@ -196,28 +237,42 @@ export const model = {
           body: { propagationPolicy: "Background" },
         });
 
-        context.logger.info("Deleted job {name} in {ns}", { name: args.jobName, ns });
+        context.logger.info("Deleted job {name} in {ns}", {
+          name: args.jobName,
+          ns,
+        });
         return { dataHandles: [] };
       },
     },
 
     listCronJobs: {
-      description: "List all CronJobs with schedule, suspend status, last run times, and active job count",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      description:
+        "List all CronJobs with schedule, suspend status, last run times, and active job count",
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { batchApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
         const labels = context.globalArgs.labels;
 
-        const resp = await batchApi.listNamespacedCronJob({ namespace: ns, labelSelector: labels });
+        const resp = await batchApi.listNamespacedCronJob({
+          namespace: ns,
+          labelSelector: labels,
+        });
         const cronJobs = resp.items || [];
 
-        context.logger.info("Found {count} CronJobs in {ns}", { count: cronJobs.length, ns });
+        context.logger.info("Found {count} CronJobs in {ns}", {
+          count: cronJobs.length,
+          ns,
+        });
 
         const handles = [];
         for (const cj of cronJobs) {
           const normalized = normalizeCronJob(cj);
-          const handle = await context.writeResource("cronJob", sanitizeInstanceName(normalized.name), normalized);
+          const handle = await context.writeResource(
+            "cronJob",
+            sanitizeInstanceName(normalized.name),
+            normalized,
+          );
           handles.push(handle);
         }
         return { dataHandles: handles };
@@ -225,18 +280,27 @@ export const model = {
     },
 
     getCronJob: {
-      description: "Get a CronJob's schedule, suspend status, concurrency policy, and history limits",
+      description:
+        "Get a CronJob's schedule, suspend status, concurrency policy, and history limits",
       arguments: z.object({
         cronJobName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { batchApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const cj = await batchApi.readNamespacedCronJob({ name: args.cronJobName, namespace: ns });
+        const cj = await batchApi.readNamespacedCronJob({
+          name: args.cronJobName,
+          namespace: ns,
+        });
         const normalized = normalizeCronJob(cj);
 
-        const handle = await context.writeResource("cronJob", sanitizeInstanceName(normalized.name), normalized);
+        const handle = await context.writeResource(
+          "cronJob",
+          sanitizeInstanceName(normalized.name),
+          normalized,
+        );
         return { dataHandles: [handle] };
       },
     },
@@ -245,10 +309,11 @@ export const model = {
       description: "Delete a CronJob and all its child Jobs",
       arguments: z.object({
         cronJobName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { batchApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         await batchApi.deleteNamespacedCronJob({
           name: args.cronJobName,
@@ -256,7 +321,10 @@ export const model = {
           body: { propagationPolicy: "Background" },
         });
 
-        context.logger.info("Deleted CronJob {name} in {ns}", { name: args.cronJobName, ns });
+        context.logger.info("Deleted CronJob {name} in {ns}", {
+          name: args.cronJobName,
+          ns,
+        });
         return { dataHandles: [] };
       },
     },

@@ -1,5 +1,10 @@
 import { z } from "npm:zod@4";
-import { buildClient, K8sGlobalArgsSchema, normalizeMeta, sanitizeInstanceName } from "./_helpers.ts";
+import {
+  buildClient,
+  K8sGlobalArgsSchema,
+  normalizeMeta,
+  sanitizeInstanceName,
+} from "./_helpers.ts";
 
 // --- Schemas ---
 
@@ -37,7 +42,6 @@ function normalizeMetricStatus(metric) {
   const type = metric.type || "Unknown";
   let name = "";
   let currentValue = "";
-  let targetValue = "";
 
   if (type === "Resource") {
     const res = metric.resource || {};
@@ -57,7 +61,8 @@ function normalizeMetricStatus(metric) {
   } else if (type === "External") {
     const ext = metric.external || {};
     name = (ext.metric || {}).name || "";
-    currentValue = (ext.current || {}).value || (ext.current || {}).averageValue || "";
+    currentValue = (ext.current || {}).value ||
+      (ext.current || {}).averageValue || "";
   }
 
   return { type, name, currentValue, targetValue: "" };
@@ -82,11 +87,13 @@ function normalizeMetricSpec(spec) {
   } else if (type === "Object") {
     const obj = spec.object || {};
     name = (obj.metric || {}).name || "";
-    targetValue = (obj.target || {}).value || (obj.target || {}).averageValue || "";
+    targetValue = (obj.target || {}).value || (obj.target || {}).averageValue ||
+      "";
   } else if (type === "External") {
     const ext = spec.external || {};
     name = (ext.metric || {}).name || "";
-    targetValue = (ext.target || {}).value || (ext.target || {}).averageValue || "";
+    targetValue = (ext.target || {}).value || (ext.target || {}).averageValue ||
+      "";
   }
 
   return { type, name, targetValue };
@@ -104,7 +111,9 @@ function normalizeHpa(raw) {
 
   const metrics = specMetrics.map((sm, i) => {
     const specNorm = normalizeMetricSpec(sm);
-    const statusNorm = statusMetrics[i] ? normalizeMetricStatus(statusMetrics[i]) : {};
+    const statusNorm = statusMetrics[i]
+      ? normalizeMetricStatus(statusMetrics[i])
+      : {};
     return {
       type: specNorm.type,
       name: specNorm.name,
@@ -126,21 +135,26 @@ function normalizeHpa(raw) {
       status: c.status || "",
       reason: c.reason || "",
       message: c.message || "",
-      lastTransitionTime: c.lastTransitionTime ? new Date(c.lastTransitionTime).toISOString() : "",
+      lastTransitionTime: c.lastTransitionTime
+        ? new Date(c.lastTransitionTime).toISOString()
+        : "",
     })),
-    lastScaleTime: status.lastScaleTime ? new Date(status.lastScaleTime).toISOString() : "",
+    lastScaleTime: status.lastScaleTime
+      ? new Date(status.lastScaleTime).toISOString()
+      : "",
   };
 }
 
 // --- Model ---
 
 export const model = {
-  type: "@swamp_lord/hpa",
+  type: "@john/hpa",
   version: "2026.02.27.1",
   globalArguments: K8sGlobalArgsSchema,
   resources: {
     hpa: {
-      description: "HorizontalPodAutoscaler with current/target metrics, replica range, scale conditions, and last scale time",
+      description:
+        "HorizontalPodAutoscaler with current/target metrics, replica range, scale conditions, and last scale time",
       schema: HpaSchema,
       lifetime: "infinite",
       garbageCollection: 10,
@@ -148,22 +162,32 @@ export const model = {
   },
   methods: {
     list: {
-      description: "List all HorizontalPodAutoscalers in the namespace with current vs target metrics and replica counts",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      description:
+        "List all HorizontalPodAutoscalers in the namespace with current vs target metrics and replica counts",
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { autoscalingApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
         const labels = context.globalArgs.labels;
 
-        const resp = await autoscalingApi.listNamespacedHorizontalPodAutoscaler({ namespace: ns, labelSelector: labels });
+        const resp = await autoscalingApi.listNamespacedHorizontalPodAutoscaler(
+          { namespace: ns, labelSelector: labels },
+        );
         const hpas = resp.items || [];
 
-        context.logger.info("Found {count} HPAs in {ns}", { count: hpas.length, ns });
+        context.logger.info("Found {count} HPAs in {ns}", {
+          count: hpas.length,
+          ns,
+        });
 
         const handles = [];
         for (const hpa of hpas) {
           const normalized = normalizeHpa(hpa);
-          const handle = await context.writeResource("hpa", sanitizeInstanceName(normalized.name), normalized);
+          const handle = await context.writeResource(
+            "hpa",
+            sanitizeInstanceName(normalized.name),
+            normalized,
+          );
           handles.push(handle);
         }
         return { dataHandles: handles };
@@ -171,34 +195,45 @@ export const model = {
     },
 
     get: {
-      description: "Get an HPA's current vs target metrics, replica range, scale conditions, and last scale time",
+      description:
+        "Get an HPA's current vs target metrics, replica range, scale conditions, and last scale time",
       arguments: z.object({
         hpaName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { autoscalingApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const hpa = await autoscalingApi.readNamespacedHorizontalPodAutoscaler({ name: args.hpaName, namespace: ns });
+        const hpa = await autoscalingApi.readNamespacedHorizontalPodAutoscaler({
+          name: args.hpaName,
+          namespace: ns,
+        });
         const normalized = normalizeHpa(hpa);
 
-        const handle = await context.writeResource("hpa", sanitizeInstanceName(normalized.name), normalized);
+        const handle = await context.writeResource(
+          "hpa",
+          sanitizeInstanceName(normalized.name),
+          normalized,
+        );
         return { dataHandles: [handle] };
       },
     },
 
     create: {
-      description: "Create an HPA targeting a deployment with CPU utilization threshold and replica range",
+      description:
+        "Create an HPA targeting a deployment with CPU utilization threshold and replica range",
       arguments: z.object({
         hpaName: z.string(),
         targetDeployment: z.string(),
         minReplicas: z.number().default(1),
         maxReplicas: z.number(),
         cpuTargetPercent: z.number().default(80),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { autoscalingApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         const body = {
           metadata: { name: args.hpaName, namespace: ns },
@@ -223,7 +258,8 @@ export const model = {
           },
         };
 
-        const created = await autoscalingApi.createNamespacedHorizontalPodAutoscaler({ namespace: ns, body });
+        const created = await autoscalingApi
+          .createNamespacedHorizontalPodAutoscaler({ namespace: ns, body });
         const normalized = normalizeHpa(created);
 
         context.logger.info("Created HPA {name} targeting {target} in {ns}", {
@@ -232,7 +268,11 @@ export const model = {
           ns,
         });
 
-        const handle = await context.writeResource("hpa", sanitizeInstanceName(normalized.name), normalized);
+        const handle = await context.writeResource(
+          "hpa",
+          sanitizeInstanceName(normalized.name),
+          normalized,
+        );
         return { dataHandles: [handle] };
       },
     },
@@ -241,14 +281,21 @@ export const model = {
       description: "Delete a HorizontalPodAutoscaler",
       arguments: z.object({
         hpaName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { autoscalingApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        await autoscalingApi.deleteNamespacedHorizontalPodAutoscaler({ name: args.hpaName, namespace: ns });
+        await autoscalingApi.deleteNamespacedHorizontalPodAutoscaler({
+          name: args.hpaName,
+          namespace: ns,
+        });
 
-        context.logger.info("Deleted HPA {name} in {ns}", { name: args.hpaName, ns });
+        context.logger.info("Deleted HPA {name} in {ns}", {
+          name: args.hpaName,
+          ns,
+        });
         return { dataHandles: [] };
       },
     },

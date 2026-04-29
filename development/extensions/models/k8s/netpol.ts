@@ -1,5 +1,10 @@
 import { z } from "npm:zod@4";
-import { buildClient, K8sGlobalArgsSchema, normalizeMeta, sanitizeInstanceName } from "./_helpers.ts";
+import {
+  buildClient,
+  K8sGlobalArgsSchema,
+  normalizeMeta,
+  sanitizeInstanceName,
+} from "./_helpers.ts";
 
 // --- Schemas ---
 
@@ -11,7 +16,7 @@ const NetPolSchema = z.object({
   policyTypes: z.array(z.string()),
   ingressRules: z.array(z.object({
     from: z.array(z.object({
-      type: z.string(),
+      kind: z.string(),
       selector: z.record(z.string(), z.string()),
       cidr: z.string(),
       except: z.array(z.string()),
@@ -24,7 +29,7 @@ const NetPolSchema = z.object({
   })),
   egressRules: z.array(z.object({
     to: z.array(z.object({
-      type: z.string(),
+      kind: z.string(),
       selector: z.record(z.string(), z.string()),
       cidr: z.string(),
       except: z.array(z.string()),
@@ -45,7 +50,7 @@ const NetPolSchema = z.object({
 function normalizePeer(peer) {
   if (peer.podSelector) {
     return {
-      type: "podSelector",
+      kind: "podSelector",
       selector: peer.podSelector.matchLabels || {},
       cidr: "",
       except: [],
@@ -53,7 +58,7 @@ function normalizePeer(peer) {
   }
   if (peer.namespaceSelector) {
     return {
-      type: "namespaceSelector",
+      kind: "namespaceSelector",
       selector: peer.namespaceSelector.matchLabels || {},
       cidr: "",
       except: [],
@@ -61,13 +66,13 @@ function normalizePeer(peer) {
   }
   if (peer.ipBlock) {
     return {
-      type: "ipBlock",
+      kind: "ipBlock",
       selector: {},
       cidr: peer.ipBlock.cidr || "",
       except: peer.ipBlock.except || [],
     };
   }
-  return { type: "unknown", selector: {}, cidr: "", except: [] };
+  return { kind: "unknown", selector: {}, cidr: "", except: [] };
 }
 
 function normalizePort(port) {
@@ -104,12 +109,13 @@ function normalizeNetPol(raw) {
 // --- Model ---
 
 export const model = {
-  type: "@swamp_lord/netpol",
+  type: "@john/netpol",
   version: "2026.02.27.1",
   globalArguments: K8sGlobalArgsSchema,
   resources: {
     netpol: {
-      description: "NetworkPolicy with pod selector, ingress/egress rules, peer selectors, and CIDR blocks",
+      description:
+        "NetworkPolicy with pod selector, ingress/egress rules, peer selectors, and CIDR blocks",
       schema: NetPolSchema,
       lifetime: "infinite",
       garbageCollection: 10,
@@ -117,22 +123,33 @@ export const model = {
   },
   methods: {
     list: {
-      description: "List all NetworkPolicies in the namespace with pod selectors, policy types, and rule counts",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      description:
+        "List all NetworkPolicies in the namespace with pod selectors, policy types, and rule counts",
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { networkingApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
         const labels = context.globalArgs.labels;
 
-        const resp = await networkingApi.listNamespacedNetworkPolicy({ namespace: ns, labelSelector: labels });
+        const resp = await networkingApi.listNamespacedNetworkPolicy({
+          namespace: ns,
+          labelSelector: labels,
+        });
         const policies = resp.items || [];
 
-        context.logger.info("Found {count} NetworkPolicies in {ns}", { count: policies.length, ns });
+        context.logger.info("Found {count} NetworkPolicies in {ns}", {
+          count: policies.length,
+          ns,
+        });
 
         const handles = [];
         for (const pol of policies) {
           const normalized = normalizeNetPol(pol);
-          const handle = await context.writeResource("netpol", sanitizeInstanceName(normalized.name), normalized);
+          const handle = await context.writeResource(
+            "netpol",
+            sanitizeInstanceName(normalized.name),
+            normalized,
+          );
           handles.push(handle);
         }
         return { dataHandles: handles };
@@ -140,28 +157,40 @@ export const model = {
     },
 
     get: {
-      description: "Get a NetworkPolicy's full spec with pod selector, ingress/egress rules, peer selectors, and CIDR blocks",
+      description:
+        "Get a NetworkPolicy's full spec with pod selector, ingress/egress rules, peer selectors, and CIDR blocks",
       arguments: z.object({
         policyName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { networkingApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const pol = await networkingApi.readNamespacedNetworkPolicy({ name: args.policyName, namespace: ns });
+        const pol = await networkingApi.readNamespacedNetworkPolicy({
+          name: args.policyName,
+          namespace: ns,
+        });
         const normalized = normalizeNetPol(pol);
 
-        const handle = await context.writeResource("netpol", sanitizeInstanceName(normalized.name), normalized);
+        const handle = await context.writeResource(
+          "netpol",
+          sanitizeInstanceName(normalized.name),
+          normalized,
+        );
         return { dataHandles: [handle] };
       },
     },
 
     create: {
-      description: "Create a NetworkPolicy with pod selector and ingress/egress rules",
+      description:
+        "Create a NetworkPolicy with pod selector and ingress/egress rules",
       arguments: z.object({
         policyName: z.string(),
         podSelector: z.record(z.string(), z.string()).default({}),
-        policyTypes: z.array(z.enum(["Ingress", "Egress"])).default(["Ingress"]),
+        policyTypes: z.array(z.enum(["Ingress", "Egress"])).default([
+          "Ingress",
+        ]),
         ingress: z.array(z.object({
           from: z.array(z.object({
             podSelector: z.record(z.string(), z.string()).optional(),
@@ -193,7 +222,7 @@ export const model = {
       }),
       execute: async (args, context) => {
         const { networkingApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         const spec = {
           podSelector: { matchLabels: args.podSelector },
@@ -206,8 +235,12 @@ export const model = {
             if (rule.from) {
               r.from = rule.from.map((peer) => {
                 const p = {};
-                if (peer.podSelector) p.podSelector = { matchLabels: peer.podSelector };
-                if (peer.namespaceSelector) p.namespaceSelector = { matchLabels: peer.namespaceSelector };
+                if (peer.podSelector) {
+                  p.podSelector = { matchLabels: peer.podSelector };
+                }
+                if (peer.namespaceSelector) {
+                  p.namespaceSelector = { matchLabels: peer.namespaceSelector };
+                }
                 if (peer.ipBlock) p.ipBlock = peer.ipBlock;
                 return p;
               });
@@ -223,8 +256,12 @@ export const model = {
             if (rule.to) {
               r.to = rule.to.map((peer) => {
                 const p = {};
-                if (peer.podSelector) p.podSelector = { matchLabels: peer.podSelector };
-                if (peer.namespaceSelector) p.namespaceSelector = { matchLabels: peer.namespaceSelector };
+                if (peer.podSelector) {
+                  p.podSelector = { matchLabels: peer.podSelector };
+                }
+                if (peer.namespaceSelector) {
+                  p.namespaceSelector = { matchLabels: peer.namespaceSelector };
+                }
                 if (peer.ipBlock) p.ipBlock = peer.ipBlock;
                 return p;
               });
@@ -239,12 +276,22 @@ export const model = {
           spec,
         };
 
-        const created = await networkingApi.createNamespacedNetworkPolicy({ namespace: ns, body });
+        const created = await networkingApi.createNamespacedNetworkPolicy({
+          namespace: ns,
+          body,
+        });
         const normalized = normalizeNetPol(created);
 
-        context.logger.info("Created NetworkPolicy {name} in {ns}", { name: args.policyName, ns });
+        context.logger.info("Created NetworkPolicy {name} in {ns}", {
+          name: args.policyName,
+          ns,
+        });
 
-        const handle = await context.writeResource("netpol", sanitizeInstanceName(normalized.name), normalized);
+        const handle = await context.writeResource(
+          "netpol",
+          sanitizeInstanceName(normalized.name),
+          normalized,
+        );
         return { dataHandles: [handle] };
       },
     },
@@ -253,14 +300,21 @@ export const model = {
       description: "Delete a NetworkPolicy",
       arguments: z.object({
         policyName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { networkingApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        await networkingApi.deleteNamespacedNetworkPolicy({ name: args.policyName, namespace: ns });
+        await networkingApi.deleteNamespacedNetworkPolicy({
+          name: args.policyName,
+          namespace: ns,
+        });
 
-        context.logger.info("Deleted NetworkPolicy {name} in {ns}", { name: args.policyName, ns });
+        context.logger.info("Deleted NetworkPolicy {name} in {ns}", {
+          name: args.policyName,
+          ns,
+        });
         return { dataHandles: [] };
       },
     },

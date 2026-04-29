@@ -1,0 +1,35 @@
+{
+  "@swamp/gcp/storage": {
+    "version": "2026.04.13.1",
+    "pulledAt": "2026-04-13T18:26:42.532Z",
+    "files": [
+      ".swamp/pulled-extensions/models/managedfolders.ts",
+      ".swamp/pulled-extensions/models/objectaccesscontrols.ts",
+      ".swamp/pulled-extensions/models/folders.ts",
+      ".swamp/pulled-extensions/models/objects.ts",
+      ".swamp/pulled-extensions/models/bucketaccesscontrols.ts",
+      ".swamp/pulled-extensions/models/hmackeys.ts",
+      ".swamp/pulled-extensions/models/serviceaccount.ts",
+      ".swamp/pulled-extensions/models/notifications.ts",
+      ".swamp/pulled-extensions/models/defaultobjectaccesscontrols.ts",
+      ".swamp/pulled-extensions/models/_lib/gcp.ts",
+      ".swamp/pulled-extensions/models/buckets.ts",
+      ".swamp/pulled-extensions/models/anywherecaches.ts",
+      ".swamp/bundles/2e4ea9ae/anywherecaches.js",
+      ".swamp/bundles/2e4ea9ae/objectaccesscontrols.js",
+      ".swamp/bundles/2e4ea9ae/folders.js",
+      ".swamp/bundles/2e4ea9ae/objects.js",
+      ".swamp/bundles/2e4ea9ae/bucketaccesscontrols.js",
+      ".swamp/bundles/2e4ea9ae/hmackeys.js",
+      ".swamp/bundles/2e4ea9ae/managedfolders.js",
+      ".swamp/bundles/2e4ea9ae/buckets.js",
+      ".swamp/bundles/2e4ea9ae/serviceaccount.js",
+      ".swamp/bundles/2e4ea9ae/notifications.js",
+      ".swamp/bundles/2e4ea9ae/defaultobjectaccesscontrols.js",
+      ".swamp/pulled-extensions/models/README.md",
+      ".swamp/pulled-extensions/models/LICENSE.txt"
+    ],
+    "checksum": "282a8b9a33d7c25716bf09a01c198762f75eaf45e116a8188b0d34d89a1dff1b",
+    "serverUrl": "https://swamp.club"
+  }
+}

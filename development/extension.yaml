@@ -1,7 +1,8 @@
 manifestVersion: 1
 name: "@john/k8s"
-version: "2026.02.27.4"
+version: "2026.04.29.4"
 description: "Kubernetes operational toolkit — 15 model types covering pods, deployments, services, RBAC, storage, networking, autoscaling, batch jobs, and more. Includes 13 ready-to-run workflows for namespace debugging, security audits, RBAC analysis, cluster health, and operational diagnostics."
+repository: https://github.com/johnrwatson/k8s-swamp-extension
 models:
   - k8s/pod.ts
   - k8s/pod_summary.ts
@@ -19,16 +20,16 @@ models:
   - k8s/netpol.ts
   - k8s/rbac.ts
 workflows:
-  - namespace-debug/workflow.yaml
-  - deployment-status/workflow.yaml
-  - service-connectivity/workflow.yaml
-  - cluster-health/workflow.yaml
-  - security-audit/workflow.yaml
-  - rbac-audit/workflow.yaml
-  - storage-health/workflow.yaml
-  - autoscaling-status/workflow.yaml
-  - batch-jobs-status/workflow.yaml
-  - network-audit/workflow.yaml
-  - pod-inventory/workflow.yaml
-  - pod-health-check/workflow.yaml
-  - cluster-summary/workflow.yaml
+  - "@john/debug-namespace-deep/workflow.yaml"
+  - "@john/deployment-status/workflow.yaml"
+  - "@john/service-connectivity/workflow.yaml"
+  - "@john/cluster-health/workflow.yaml"
+  - "@john/security-audit/workflow.yaml"
+  - "@john/rbac-audit/workflow.yaml"
+  - "@john/storage-health/workflow.yaml"
+  - "@john/autoscaling-status/workflow.yaml"
+  - "@john/batch-jobs-status/workflow.yaml"
+  - "@john/network-audit/workflow.yaml"
+  - "@john/pod-inventory/workflow.yaml"
+  - "@john/pod-health-check/workflow.yaml"
+  - "@john/cluster-summary/workflow.yaml"

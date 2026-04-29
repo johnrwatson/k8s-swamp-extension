@@ -1,5 +1,10 @@
 import { z } from "npm:zod@4";
-import { buildClient, K8sGlobalArgsSchema, normalizeMeta, sanitizeInstanceName } from "./_helpers.ts";
+import {
+  buildClient,
+  K8sGlobalArgsSchema,
+  normalizeMeta,
+  sanitizeInstanceName,
+} from "./_helpers.ts";
 
 // --- Schemas ---
 
@@ -53,7 +58,7 @@ function normalizeSecretMeta(raw) {
 // --- Model ---
 
 export const model = {
-  type: "@swamp_lord/secret",
+  type: "@john/secret",
   version: "2026.02.27.1",
   globalArguments: K8sGlobalArgsSchema,
   resources: {
@@ -64,7 +69,8 @@ export const model = {
       garbageCollection: 10,
     },
     secret: {
-      description: "Secret with decoded data values (sensitive, stored in vault)",
+      description:
+        "Secret with decoded data values (sensitive, stored in vault)",
       schema: SecretSchema,
       lifetime: "infinite",
       garbageCollection: 10,
@@ -72,14 +78,18 @@ export const model = {
   },
   methods: {
     list: {
-      description: "List all secrets in the namespace showing type and data keys (not content)",
-      arguments: z.object({}),
-      execute: async (_args, context) => {
+      description:
+        "List all secrets in the namespace showing type and data keys (not content)",
+      arguments: z.object({ namespace: z.string().optional() }),
+      execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
         const labels = context.globalArgs.labels;
 
-        const resp = await coreApi.listNamespacedSecret({ namespace: ns, labelSelector: labels });
+        const resp = await coreApi.listNamespacedSecret({
+          namespace: ns,
+          labelSelector: labels,
+        });
         const secrets = resp.items || [];
 
         context.logger.info("Found {count} secrets in {ns}", {
@@ -102,15 +112,20 @@ export const model = {
     },
 
     get: {
-      description: "Get a secret with decoded data values (sensitive, stored in vault)",
+      description:
+        "Get a secret with decoded data values (sensitive, stored in vault)",
       arguments: z.object({
         secretName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const sec = await coreApi.readNamespacedSecret({ name: args.secretName, namespace: ns });
+        const sec = await coreApi.readNamespacedSecret({
+          name: args.secretName,
+          namespace: ns,
+        });
         const meta = normalizeMeta(sec);
         const decoded = decodeSecretData(sec);
 
@@ -131,16 +146,18 @@ export const model = {
     },
 
     create: {
-      description: "Create a secret from key-value data pairs (values will be base64-encoded)",
+      description:
+        "Create a secret from key-value data pairs (values will be base64-encoded)",
       arguments: z.object({
         secretName: z.string(),
         data: z.record(z.string(), z.string()),
         type: z.string().default("Opaque"),
         labels: z.record(z.string(), z.string()).optional(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
         // Base64-encode the data values
         const encodedData = {};
@@ -158,7 +175,10 @@ export const model = {
           data: encodedData,
         };
 
-        const created = await coreApi.createNamespacedSecret({ namespace: ns, body });
+        const created = await coreApi.createNamespacedSecret({
+          namespace: ns,
+          body,
+        });
         const meta = normalizeMeta(created);
         const decoded = decodeSecretData(created);
 
@@ -182,16 +202,21 @@ export const model = {
     },
 
     update: {
-      description: "Merge new keys into an existing secret via read-then-replace (values will be base64-encoded)",
+      description:
+        "Merge new keys into an existing secret via read-then-replace (values will be base64-encoded)",
       arguments: z.object({
         secretName: z.string(),
         data: z.record(z.string(), z.string()),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        const current = await coreApi.readNamespacedSecret({ name: args.secretName, namespace: ns });
+        const current = await coreApi.readNamespacedSecret({
+          name: args.secretName,
+          namespace: ns,
+        });
 
         // Merge new base64-encoded values
         const existingData = current.data || {};
@@ -231,12 +256,16 @@ export const model = {
       description: "Delete a secret",
       arguments: z.object({
         secretName: z.string(),
+        namespace: z.string().optional(),
       }),
       execute: async (args, context) => {
         const { coreApi } = buildClient(context.globalArgs);
-        const ns = context.globalArgs.namespace;
+        const ns = args.namespace ?? context.globalArgs.namespace;
 
-        await coreApi.deleteNamespacedSecret({ name: args.secretName, namespace: ns });
+        await coreApi.deleteNamespacedSecret({
+          name: args.secretName,
+          namespace: ns,
+        });
 
         context.logger.info("Deleted secret {name} in {ns}", {
           name: args.secretName,
