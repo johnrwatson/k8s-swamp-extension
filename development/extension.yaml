@@ -1,6 +1,6 @@
 manifestVersion: 1
 name: "@john/k8s"
-version: "2026.04.29.4"
+version: "2026.04.29.5"
 description: "Kubernetes operational toolkit — 15 model types covering pods, deployments, services, RBAC, storage, networking, autoscaling, batch jobs, and more. Includes 13 ready-to-run workflows for namespace debugging, security audits, RBAC analysis, cluster health, and operational diagnostics."
 repository: https://github.com/johnrwatson/k8s-swamp-extension
 models:
